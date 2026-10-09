@@ -26,3 +26,28 @@ Rejected: building public deployment and its protections now.
 ## 2026-10-08: Frontend direction
 The approved frontend design mockup (dark theme: landing page and review report) is the
 reference for the frontend (M7).
+
+## 2026-10-09: V1 architecture
+Full reasoning and rejected alternatives are in `ARCHITECTURE.md`. The main decisions:
+
+- **PostgreSQL confirmed.** Rejected: H2, SQLite, MySQL, MongoDB.
+- **Backend packages by feature**, with controller, service and repository layers inside
+  each. Rejected: packages by layer; full hexagonal architecture.
+- **`reviews` and `analyses` are separate tables.** A review is a user's request and carries
+  the job state; an analysis is the shared result for one commit and is the cache.
+  Rejected: one table with results per user; a separate `jobs` table.
+- **Job queue in the database, worker in the same process.** Rejected: in-memory `@Async`
+  queue (lost on restart), a message broker, a job library.
+- **A retry restarts the whole analysis** and spends quota again, at most three attempts.
+  Rejected: persisting per-chunk results and resuming.
+- **Repository fetched as one zip archive.** Rejected: Contents API file by file (uses up
+  the unauthenticated rate limit), `git clone`.
+- **Flyway migrations** with Hibernate in validate mode. Rejected: `ddl-auto=update`, Liquibase.
+- **Testcontainers** for integration tests. Rejected: H2 in tests.
+- **Findings have a `kind`** (`ISSUE` or `GOOD_PRACTICE`). The four report counters are
+  derived from kind and severity; good practices never affect a score.
+  Rejected: a separate table for good practices; deriving the level from category.
+- **No focus selector in V1.** Every analysis covers security, maintainability and
+  performance; the frontend only filters. Rejected: a `focus` parameter (it would multiply
+  cached analyses per commit).
+- **Ollama is outside V1.** Only the `CodeReviewProvider` interface keeps it possible.
