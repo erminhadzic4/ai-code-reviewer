@@ -1,0 +1,50 @@
+:root {
+  /* Surfaces */
+  --color-bg: #0e1116;
+  --color-surface: #151a21;
+
+  /* Borders, from faintest to strongest */
+  --color-border-subtle: #1e242d;
+  --color-border: #272e39;
+  --color-border-strong: #2f3743;
+  --color-border-emphasis: #3a424f;
+
+  /* Text */
+  --color-text: #e9ecf1;
+  --color-text-muted: #8c95a3;
+
+  /* Accent */
+  --color-accent: #c8f65d;
+  --color-on-accent: #0e1116;
+
+  /* Finding levels */
+  --color-critical: #ff8e80;
+  --color-critical-bg: #ff7b6b24;
+  --color-warning: #f6c255;
+  --color-warning-bg: #f6c25524;
+  --color-smell: #9db2ff;
+  --color-smell-bg: #9db2ff24;
+  --color-good: #5fd9a4;
+  --color-good-bg: #5fd9a424;
+
+  /* Diff */
+  --color-diff-removed: #ffa597;
+  --color-diff-removed-bg: #ff7b6b1f;
+  --color-diff-added: #86e8be;
+  --color-diff-added-bg: #5fd9a41f;
+
+  /* Font families (web fonts are not loaded yet, so the fallbacks apply) */
+  --font-display: 'Bricolage Grotesque', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-body: 'Instrument Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Code', Consolas, monospace;
+
+  /* Radii */
+  --radius-sm: 12px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+  --radius-pill: 999px;
+
+  /* Layout */
+  --content-max-width: 1180px;
+}

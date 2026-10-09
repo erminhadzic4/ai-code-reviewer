@@ -4,12 +4,12 @@ Rule: one milestone = one branch = one PR. Check items off when merged.
 Scope for now: runs locally. Public deployment is a later option (see "Later").
 
 ## Day 0: foundations
-- [ ] Monorepo created (`backend/`, `frontend/`, `docs/`), first commit
-- [ ] `ROADMAP.md`, `DECISIONS.md` in place
-- [ ] Architecture plan saved to `docs/ARCHITECTURE.md`
-- [ ] Spring Boot skeleton with health endpoint
-- [ ] Vite + React + TypeScript skeleton
-- [ ] CI builds and tests backend and frontend
+- [x] Monorepo created (`backend/`, `frontend/`, `docs/`), first commit
+- [x] `ROADMAP.md`, `DECISIONS.md` in place
+- [x] Architecture plan saved to `docs/ARCHITECTURE.md`
+- [x] Spring Boot skeleton with health endpoint
+- [x] Vite + React + TypeScript skeleton
+- [x] CI builds and tests backend and frontend
 
 ## V1: working review of a public repository
 - [ ] M1 Auth: registration, login, JWT, protected endpoints, tests
