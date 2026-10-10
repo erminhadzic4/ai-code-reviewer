@@ -13,6 +13,12 @@ spring:
       ddl-auto: validate
     open-in-view: false
 
+app:
+  jwt:
+    # No default on purpose: the application refuses to start without a strong secret.
+    secret: ${JWT_SECRET:}
+    expiration: 24h
+
 management:
   endpoints:
     web:

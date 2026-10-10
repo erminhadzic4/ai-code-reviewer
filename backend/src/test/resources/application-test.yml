@@ -2,3 +2,8 @@ spring:
   datasource:
     # Placeholder only: the connection comes from the PostgreSQL test container.
     password: unused
+
+app:
+  jwt:
+    # Test-only value, never used outside the test suite.
+    secret: test-only-jwt-secret-0123456789-abcdefghij
