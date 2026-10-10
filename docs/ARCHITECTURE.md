@@ -182,8 +182,13 @@ documentation requires `Authorization: Bearer <JWT>`.
 | Method and path | Body | Success | Errors |
 |---|---|---|---|
 | `POST /api/auth/register` | `{email, password}` | 201 `{accessToken, expiresIn, user}` | 400 validation, 409 email taken |
-| `POST /api/auth/login` | `{email, password}` | 200 `{accessToken, expiresIn, user}` | 401 |
+| `POST /api/auth/login` | `{email, password}` | 200 `{accessToken, expiresIn, user}` | 400 empty field, 401 |
 | `GET /api/auth/me` | | 200 `{id, email}` | 401 |
+
+`expiresIn` is in seconds. A wrong password and an unknown email give the same 401, so
+login does not reveal which emails are registered. The access token is valid for 24 hours
+and carries only the user id; the application does not start without a `JWT_SECRET` of at
+least 32 bytes.
 
 ### Reviews
 
@@ -212,7 +217,7 @@ so one commit would have several analyses and spend quota several times.
 | Separate status and result endpoints | One endpoint returning everything | Status is called many times and must stay small; the report is large and fetched once. |
 | 404 for another user's review | 403 | 403 reveals that a review with that id exists. |
 | JWT access token (HS256, secret from `JWT_SECRET`), no refresh token | Refresh tokens with rotation; server sessions | Refresh tokens add a table and a flow that a local app does not need. Sessions depart from the agreed stack. |
-| `jjwt` with a custom filter | `spring-security-oauth2-resource-server` | The token handling stays explicit and small; the resource server adds more concepts for the same result. Confirmed again when M1 is planned. |
+| `jjwt` with a custom filter | `spring-security-oauth2-resource-server` | The token handling stays explicit and small; the resource server adds more concepts for the same result. Confirmed in M1. |
 | Token kept in `localStorage` | httpOnly cookie | A cookie requires CSRF protection. Acceptable for local use; revisit before any public deployment. |
 | No version segment in paths | `/api/v1/...` | The only client is the frontend in the same repository, changed in the same commit. |
 
@@ -340,13 +345,15 @@ docker compose up --build
 
 | Service | What it is | Port |
 |---|---|---|
-| `db` | `postgres` (pinned version), named volume, health check | internal |
+| `db` | `postgres:18`, named volume, health check | 5432, on `127.0.0.1` only |
 | `backend` | multi-stage Dockerfile: Maven build, then a JRE 21 image; waits for `db` to be healthy | 8080 |
 | `frontend` | multi-stage Dockerfile: `npm run build`, then nginx serving static files and proxying `/api` to the backend | 3000 |
 
 The browser talks only to `http://localhost:3000`, so no CORS configuration is needed.
 
-`.env.example` (placeholders only; `.env` is git-ignored):
+`.env.example` (placeholders only; `.env` is git-ignored). The file lists only variables
+that are in use, so each one is added by the milestone that introduces it; the complete
+list for V1 is:
 
 ```
 POSTGRES_DB=codereviewer
@@ -360,9 +367,11 @@ GITHUB_TOKEN=
 ```
 
 Development mode, for faster feedback: `docker compose up db`, then `./mvnw spring-boot:run`
-and `npm run dev` (Vite proxies `/api` to port 8080).
+and `npm run dev` (Vite proxies `/api` to port 8080). The database port is published on
+`127.0.0.1` for this mode, and a backend started from `backend/` reads the `.env` file in
+the repository root, so the same file configures both the database and the backend.
 
-The `db` service and `.env.example` arrive in M1 with the first table; the `backend` and
+The `db` service and `.env.example` arrived in M1 with the first table; the `backend` and
 `frontend` containers arrive in M8.
 
 | Decision | Rejected | Why |

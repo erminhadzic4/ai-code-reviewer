@@ -12,7 +12,7 @@ Scope for now: runs locally. Public deployment is a later option (see "Later").
 - [x] CI builds and tests backend and frontend
 
 ## V1: working review of a public repository
-- [ ] M1 Auth: registration, login, JWT, protected endpoints, tests
+- [x] M1 Auth: registration, login, JWT, protected endpoints, tests
 - [ ] M2 GitHub client: file tree and contents for a public repo; filtering of
       `node_modules`, `target`, binaries, lock files, generated code; handle rate limits
 - [ ] M3 Review domain and `CodeReviewProvider` interface with a fake provider
