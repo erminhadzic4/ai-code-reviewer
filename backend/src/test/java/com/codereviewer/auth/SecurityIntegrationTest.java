@@ -1,6 +1,7 @@
 package com.codereviewer.auth;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -9,10 +10,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Date;
+import java.util.UUID;
 
 import javax.crypto.spec.SecretKeySpec;
 
 import com.codereviewer.IntegrationTest;
+import com.codereviewer.user.User;
+import com.codereviewer.user.UserRepository;
 import io.jsonwebtoken.Jwts;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,12 +36,16 @@ class SecurityIntegrationTest {
 	@Autowired
 	private JwtService jwtService;
 
+	@Autowired
+	private UserRepository userRepository;
+
 	@Value("${app.jwt.secret}")
 	private String secret;
 
 	@Test
 	void requestWithoutATokenIsRejectedWithAProblemDetail() throws Exception {
-		expectUnauthorized(mockMvc.perform(get(PROTECTED_PATH)));
+		expectUnauthorized(mockMvc.perform(get(PROTECTED_PATH)))
+				.andExpect(jsonPath("$.instance").value(PROTECTED_PATH));
 	}
 
 	@Test
@@ -73,12 +81,38 @@ class SecurityIntegrationTest {
 	}
 
 	@Test
+	void tokenOfAUserThatNoLongerExistsIsRejected() throws Exception {
+		User user = userRepository.saveAndFlush(new User("deleted-" + UUID.randomUUID() + "@example.com", "hash"));
+		String token = jwtService.issue(user.getId());
+		mockMvc.perform(get(PROTECTED_PATH).header("Authorization", "Bearer " + token)).andExpect(status().isOk());
+
+		userRepository.delete(user);
+
+		mockMvc.perform(get(PROTECTED_PATH).header("Authorization", "Bearer " + token))
+				.andExpect(status().isUnauthorized())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+				.andExpect(jsonPath("$.detail").value("Authentication required"));
+	}
+
+	@Test
+	void expiredTokenDoesNotBlockAPublicEndpoint() throws Exception {
+		String expired = signedToken(secret, Instant.now().minusSeconds(60));
+
+		// The answer comes from the login itself, not from the token check.
+		mockMvc.perform(post("/api/auth/login").header("Authorization", "Bearer " + expired)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"email\":\"nobody@example.com\",\"password\":\"whatever-it-is\"}"))
+				.andExpect(status().isUnauthorized())
+				.andExpect(jsonPath("$.detail").value("Invalid email or password"));
+	}
+
+	@Test
 	void healthEndpointNeedsNoToken() throws Exception {
 		mockMvc.perform(get("/actuator/health")).andExpect(status().isOk());
 	}
 
-	private static void expectUnauthorized(ResultActions result) throws Exception {
-		result.andExpect(status().isUnauthorized())
+	private static ResultActions expectUnauthorized(ResultActions result) throws Exception {
+		return result.andExpect(status().isUnauthorized())
 				.andExpect(header().string("WWW-Authenticate", "Bearer"))
 				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
 				.andExpect(jsonPath("$.status").value(401))
