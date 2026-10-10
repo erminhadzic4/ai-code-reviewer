@@ -51,3 +51,35 @@ Full reasoning and rejected alternatives are in `ARCHITECTURE.md`. The main deci
   performance; the frontend only filters. Rejected: a `focus` parameter (it would multiply
   cached analyses per commit).
 - **Ollama is outside V1.** Only the `CodeReviewProvider` interface keeps it possible.
+
+## 2026-10-10: M1 authentication
+- **`jjwt` with a custom filter confirmed.** Rejected: the OAuth2 resource server, which is
+  designed for tokens issued by a separate authorisation server and adds concepts this
+  application does not use.
+- **Token:** HS256, claims `sub` (user id), `iat`, `exp`; valid for 24 hours. Rejected:
+  15 minutes (no refresh token exists), 30 days (no revocation exists).
+- **The filter does not query the database** and never rejects a request itself; the access
+  rules do. Only `/api/auth/me` loads the user. Cost: a token outlives its user until it
+  expires. Rejected: loading the user on every request.
+- **The application refuses to start** when `JWT_SECRET` is missing, shorter than 32 bytes
+  or equal to the example value. Rejected: a default secret; a logged warning.
+- **Passwords:** BCrypt, at least 8 characters and at most 72 bytes, no composition rules.
+  The upper limit is in bytes because BCrypt reads only the first 72.
+- **Login does not reveal whether an email exists:** same response, and an unknown email is
+  still checked against a hash so the response time is comparable. Registration does reveal
+  it, with 409; closing that needs email verification (see "Later" in ROADMAP.md).
+- **Emails are stored trimmed and lower-case**, enforced by a CHECK constraint. Uniqueness
+  is enforced by the database, so two simultaneous registrations cannot both succeed.
+  Rejected: `CITEXT`; a unique index on `lower(email)`.
+- **Closed by default:** every path requires a token unless it is listed as public.
+  Rejected: listing the protected paths.
+- **Errors carry their own status.** Feature exceptions extend one `ApiException`, handled
+  in one place. Rejected: a handler method per exception type, which would make the shared
+  package depend on every feature.
+- **PostgreSQL 18**, published on `127.0.0.1:5432` so the backend can run on the host
+  during development. Rejected: no published port; publishing on all interfaces.
+- **`.env` is loaded by Spring Boot** through `spring.config.import` when the backend runs
+  on the host. Rejected: a dotenv library; exporting variables by hand.
+- **`.env.example` lists only variables that are in use.** Each milestone adds its own.
+- **Integration tests are named `*IntegrationTest`** and run in the normal test phase.
+  Rejected: `*IT` with the Failsafe plugin, extra build configuration with no benefit yet.
