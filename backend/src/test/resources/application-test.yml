@@ -1,0 +1,4 @@
+spring:
+  datasource:
+    # Placeholder only: the connection comes from the PostgreSQL test container.
+    password: unused
