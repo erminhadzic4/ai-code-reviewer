@@ -17,8 +17,9 @@ import org.springframework.util.unit.DataSize;
  * @param apiUrl origin of the REST API
  * @param archiveUrl origin the API redirects to for archive downloads
  * @param connectTimeout time allowed to open a connection
- * @param readTimeout time allowed to wait for a response
- * @param downloadTimeout time allowed for a whole archive download
+ * @param readTimeout time allowed for a whole API request, from sending it to reading its answer
+ * @param downloadTimeout time allowed for a whole archive download. Nothing limits a pause
+ * inside it, so a server that stops sending holds the connection until this runs out
  * @param maxRepoSize repository size reported by GitHub above which no download is attempted.
  * That number covers the whole history and is refreshed only now and then, so this is a
  * coarse guard only; the limits below are the real ones

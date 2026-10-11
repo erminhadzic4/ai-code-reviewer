@@ -1,8 +1,6 @@
 package com.codereviewer.github;
 
-import java.io.FilterInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
@@ -83,11 +81,13 @@ public class GitHubClient {
 				.followRedirects(HttpClient.Redirect.NEVER)
 				.build();
 		this.http = restClient(client, properties.readTimeout());
-		// An archive takes longer than an API answer, so its requests get the longer limit.
 		this.downloads = restClient(client, properties.downloadTimeout());
 		this.archiveReader = new ArchiveReader(properties);
 	}
 
+	// The request factory applies its read timeout to the whole exchange, body included, and
+	// has no separate limit for a body that merely pauses. One client therefore cannot serve
+	// both a short limit for API answers and a longer one for an archive download.
 	private static RestClient restClient(HttpClient client, Duration timeout) {
 		JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(client);
 		requestFactory.setReadTimeout(timeout);
@@ -140,9 +140,7 @@ public class GitHubClient {
 		RepoRef repo = head.repo();
 		// By SHA, not by branch: a push between the two calls cannot change what is read.
 		URI uri = apiUri("/repos/" + repo.owner() + "/" + repo.name() + "/zipball/" + head.commitSha());
-		long deadline = System.nanoTime() + properties.downloadTimeout().toNanos();
-		return get(downloads, uri, JSON,
-				response -> archiveReader.read(head, new DeadlineStream(response.getBody(), deadline)));
+		return get(downloads, uri, JSON, response -> archiveReader.read(head, response.getBody()));
 	}
 
 	private URI apiUri(String path) {
@@ -299,39 +297,6 @@ public class GitHubClient {
 
 	private static GitHubException notFound() {
 		return new GitHubException(GitHubErrorCode.REPO_NOT_FOUND, "Repository not found or private");
-	}
-
-	/**
-	 * Fails once the whole download has taken too long. The request timeout covers a server
-	 * that stops sending; this covers one that keeps sending, slowly.
-	 */
-	private static final class DeadlineStream extends FilterInputStream {
-
-		private final long deadline;
-
-		DeadlineStream(InputStream in, long deadline) {
-			super(in);
-			this.deadline = deadline;
-		}
-
-		@Override
-		public int read() throws IOException {
-			check();
-			return super.read();
-		}
-
-		@Override
-		public int read(byte[] target, int offset, int length) throws IOException {
-			check();
-			return super.read(target, offset, length);
-		}
-
-		private void check() throws IOException {
-			if (System.nanoTime() - deadline > 0) {
-				throw new IOException("The archive download took too long");
-			}
-		}
-
 	}
 
 	@FunctionalInterface

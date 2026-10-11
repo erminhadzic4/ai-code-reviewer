@@ -164,9 +164,14 @@ class GitHubClientDownloadTest {
 		assertRetryableWithin(Duration.ofSeconds(3), () -> client().fetchSnapshot(HEAD));
 	}
 
+	// The three tests below pin down one behaviour of the HTTP layer that the download
+	// deadline relies on: the request timeout covers the whole exchange, body included. Nothing
+	// in this project enforces the deadline a second time, so if a new version of the framework
+	// starts applying the timeout only up to the response headers, these tests fail.
+
 	// The server answers at once and then stops in the middle of the body.
 	@Test
-	void downloadThatStallsIsStoppedByTheDownloadTimeout() {
+	void requestTimeoutCoversABodyThatStalls() {
 		settings.downloadTimeout = Duration.ofMillis(400);
 		byte[] archive = largeArchive();
 		codeload.on(ARCHIVE_PATH, Response.zip(archive).inChunks(archive.length / 2, Duration.ofSeconds(10)));
@@ -176,7 +181,7 @@ class GitHubClientDownloadTest {
 
 	// The server never stops for long, so no single read is slow; only the total is.
 	@Test
-	void downloadThatTricklesIsStoppedByTheDownloadTimeout() {
+	void requestTimeoutCoversABodyThatTrickles() {
 		settings.downloadTimeout = Duration.ofMillis(400);
 		byte[] archive = largeArchive();
 		codeload.on(ARCHIVE_PATH, Response.zip(archive).inChunks(archive.length / 100, Duration.ofMillis(50)));
@@ -184,6 +189,7 @@ class GitHubClientDownloadTest {
 		assertRetryableWithin(Duration.ofSeconds(4), () -> client().fetchSnapshot(HEAD));
 	}
 
+	// Archive requests use the download timeout, not the shorter one for API answers.
 	@Test
 	void downloadMayTakeLongerThanTheReadTimeout() {
 		settings.readTimeout = Duration.ofMillis(300);
