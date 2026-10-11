@@ -112,6 +112,18 @@ class FileFilterTest {
 	}
 
 	@ParameterizedTest
+	@ValueSource(strings = { "README", "readme", "Readme", "README-DEV", "README_ja", "README.en", "docs/README" })
+	void readmeFilesWithoutATextExtensionAreSkipped(String path) {
+		assertThat(FileFilter.checkPath(path)).contains(SkipReason.NON_CODE);
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "readme.py", "src/ReadmeParser.java", "readme-dev", "READMEFIRST.sh" })
+	void sourceFilesNamedLikeAReadmePass(String path) {
+		assertThat(FileFilter.checkPath(path)).isEmpty();
+	}
+
+	@ParameterizedTest
 	@ValueSource(strings = { "README.md", "docs/guide.rst", "notes.txt", "data/users.csv", "assets/logo.svg",
 			"README.MD" })
 	void documentationAndDataFilesAreSkipped(String path) {

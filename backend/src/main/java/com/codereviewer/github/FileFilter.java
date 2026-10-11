@@ -28,9 +28,9 @@ public final class FileFilter {
 			"poetry.lock", "uv.lock", "pipfile.lock", "composer.lock", "go.sum", "gradle.lockfile",
 			"packages.lock.json");
 
-	/** Licence and project notice files, by the name before any suffix. */
+	/** Licence, readme and project notice files, by the name before any suffix. */
 	private static final Set<String> NOTICE_FILE_STEMS = Set.of(
-			"LICENSE", "LICENCE", "UNLICENSE", "COPYING", "NOTICE", "AUTHORS", "CONTRIBUTORS", "PATENTS",
+			"README", "LICENSE", "LICENCE", "UNLICENSE", "COPYING", "NOTICE", "AUTHORS", "CONTRIBUTORS", "PATENTS",
 			"CHANGELOG");
 
 	private static final String NOTICE_SUFFIX_SEPARATORS = "-_.";
