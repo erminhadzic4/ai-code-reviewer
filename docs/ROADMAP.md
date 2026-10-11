@@ -13,7 +13,7 @@ Scope for now: runs locally. Public deployment is a later option (see "Later").
 
 ## V1: working review of a public repository
 - [x] M1 Auth: registration, login, JWT, protected endpoints, tests
-- [ ] M2 GitHub client: file tree and contents for a public repo; filtering of
+- [x] M2 GitHub client: file tree and contents for a public repo; filtering of
       `node_modules`, `target`, binaries, lock files, generated code; handle rate limits
 - [ ] M3 Review domain and `CodeReviewProvider` interface with a fake provider
       returning fixed findings (lets M5 to M7 work without AI calls)
@@ -24,8 +24,8 @@ Scope for now: runs locally. Public deployment is a later option (see "Later").
 - [ ] M7 Frontend, following the approved frontend design mockup (dark theme: landing page
       and review report): login/register, submit form, progress screen, report dashboard,
       issue list with filters and diff-style suggestions
-- [ ] M8 Polish: Swagger, README with demo GIF, one-command local run (docker-compose,
-      `.env.example`), error states, tag `v1.0`
+- [ ] M8 Polish: Swagger, one-command local run (docker-compose, `.env.example`),
+      error states, demo GIF, README, tag `v1.0`
 
 ## V2: deeper analysis
 - [ ] Review of a single file with comments next to lines
