@@ -36,6 +36,13 @@ public record JwtProperties(String secret, Duration expiration) {
 		}
 	}
 
+	// The generated toString would print the secret. It is always set here: the constructor
+	// rejects a missing one.
+	@Override
+	public String toString() {
+		return "JwtProperties[secret=set, expiration=" + expiration + "]";
+	}
+
 	byte[] secretBytes() {
 		return secret.getBytes(StandardCharsets.UTF_8);
 	}

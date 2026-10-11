@@ -65,6 +65,49 @@ class JwtPropertiesTest {
 	}
 
 	@Test
+	void secretIsNotPrinted() {
+		String printed = new JwtProperties(SECRET_OF_32_BYTES, EXPIRATION).toString();
+
+		assertThat(printed).isEqualTo("JwtProperties[secret=set, expiration=PT24H]");
+		// Not even a part of it: no run of four characters of the secret appears.
+		for (int start = 0; start + 4 <= SECRET_OF_32_BYTES.length(); start++) {
+			assertThat(printed).doesNotContain(SECRET_OF_32_BYTES.substring(start, start + 4));
+		}
+	}
+
+	@Test
+	void secretIsNotPrintedWhenTheRecordIsPartOfAMessage() {
+		JwtProperties properties = new JwtProperties(SECRET_OF_32_BYTES, EXPIRATION);
+
+		assertThat("Loaded " + properties).doesNotContain(SECRET_OF_32_BYTES);
+		assertThat(String.valueOf(properties)).doesNotContain(SECRET_OF_32_BYTES);
+	}
+
+	@Test
+	void validationMessagesDoNotContainTheSecret() {
+		String tooShort = "short-but-private-value";
+
+		assertThatThrownBy(() -> new JwtProperties(tooShort, EXPIRATION))
+				.hasMessageNotContaining(tooShort);
+		assertThatThrownBy(() -> new JwtProperties(JwtProperties.EXAMPLE_SECRET, EXPIRATION))
+				.hasMessageNotContaining(JwtProperties.EXAMPLE_SECRET);
+		assertThatThrownBy(() -> new JwtProperties(SECRET_OF_32_BYTES, Duration.ZERO))
+				.hasMessageNotContaining(SECRET_OF_32_BYTES);
+	}
+
+	@Test
+	void startupFailureDoesNotPrintAWeakSecret() {
+		String tooShort = "short-but-private-value";
+
+		contextRunner.withPropertyValues("app.jwt.secret=" + tooShort).run(context -> {
+			assertThat(context).hasFailed();
+			for (Throwable cause = context.getStartupFailure(); cause != null; cause = cause.getCause()) {
+				assertThat(String.valueOf(cause.getMessage())).doesNotContain(tooShort);
+			}
+		});
+	}
+
+	@Test
 	void contextStartsWithAStrongSecret() {
 		contextRunner.withPropertyValues("app.jwt.secret=" + SECRET_OF_32_BYTES).run(context -> {
 			assertThat(context).hasNotFailed();
