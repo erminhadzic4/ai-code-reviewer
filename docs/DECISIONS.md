@@ -83,3 +83,102 @@ Full reasoning and rejected alternatives are in `ARCHITECTURE.md`. The main deci
 - **`.env.example` lists only variables that are in use.** Each milestone adds its own.
 - **Integration tests are named `*IntegrationTest`** and run in the normal test phase.
   Rejected: `*IT` with the Failsafe plugin, extra build configuration with no benefit yet.
+
+## 2026-10-11: M2 GitHub client
+- **The repository URL is matched against one anchored pattern** and only the owner and the
+  name leave the parser. Accepted: `github.com/owner/repo` with `https://`, `http://` or no
+  scheme, optional `www.`, optional `.git`, optional trailing slash. Rejected: parsing with
+  `java.net.URI` and checking the host, because URL parsers disagree on edge cases such as
+  user info and backslashes, and one fixed shape is easier to test than a general URL.
+- **No request ever goes to an address a user typed.** Addresses are built from the configured
+  API origin and the validated names. Redirects are not followed automatically; each one is
+  checked and followed only to the API origin or the archive origin, at most three times.
+  Rejected: the HTTP client's own redirect handling, which decides the target and the headers
+  by itself.
+- **The access token is sent to the API origin only.** The archive host and any redirect
+  target never receive it. `GITHUB_TOKEN` is optional; it raises the limit from 60 to 5000
+  requests an hour and needs no scopes. Origins must use https, except on loopback for tests.
+- **GitHub's answers are treated as untrusted input.** The reported repository name goes
+  through the same parser as a user's URL, the branch name is encoded segment by segment
+  before it is put in a path (so `release/1.0` keeps its slash and `#` or `?` cannot cut the
+  path), and the commit SHA must be exactly 40 lower-case hex characters. A repository that
+  GitHub reports as private is refused even when the token could read it.
+  Rejected: the branch name as one encoded path variable, which turns `/` into `%2F`.
+- **Zip archive confirmed, three API requests per review** (two when the commit is cached).
+  The archive is requested by SHA, not by branch, so a push between two requests cannot
+  change what is read. Rejected: the Contents API (one request per file), `git clone`
+  (needs git and a working directory), the tarball (the JDK has no reader for it).
+- **The archive is read as a stream and never written to disk.** Sizes declared inside the
+  archive are ignored; only bytes actually read are counted, and entries that are skipped
+  are inflated and counted too, so a bomb hidden in a skipped directory is stopped.
+  Rejected: a temporary file with `ZipFile`.
+
+  | Limit (`app.github.*`) | Default | When crossed |
+  |---|---|---|
+  | `max-repo-size`, as reported by GitHub | 1 GB | fails, `REPO_TOO_LARGE` |
+  | `max-download-size`, compressed bytes | 50 MB | fails, `REPO_TOO_LARGE` |
+  | `max-uncompressed-size`, skipped entries included | 200 MB | fails, `REPO_TOO_LARGE` |
+  | `max-entries` in the archive | 20 000 | fails, `REPO_TOO_LARGE` |
+  | `max-file-size` of one file | 200 KB | the file is skipped |
+  | `max-files` kept for review | 500 | fails, `REPO_TOO_LARGE` |
+  | `max-source-size` of the files kept | 2 MB | fails, `REPO_TOO_LARGE` |
+
+- **`max-repo-size` is a coarse guard, set generously to 1 GB.** The number GitHub reports
+  covers the whole history, is refreshed only now and then and is 0 for a new repository, so
+  it says little about the code at one commit. It only avoids starting a download that is
+  certain to fail; the limits applied while reading the archive are the real ones.
+  Rejected: dropping the check, which would cost one request and up to 50 MB of download for
+  an obviously huge repository.
+- **A repository over the budget for kept files is rejected, not truncated.** Rejected:
+  reviewing the first files only, which would give a score for part of a repository.
+- **A path that escapes the archive root rejects the whole archive.** `..`, an absolute path
+  or an entry outside the root directory cannot come from a git repository, so the answer is
+  not what it claims to be. Paths that are legal but unusable (backslash, control characters,
+  longer than 1024 characters, duplicates) are only skipped. Rejected: skipping every bad
+  path quietly.
+- **An archive counts as complete only if it ends with the zip end record.** The JDK's
+  `ZipInputStream` returns "no more entries" without an error when the stream stops between
+  two entries or inside an entry header; on an ordinary three-file archive 89 of 384 possible
+  cut points went unnoticed. Without the check a dropped connection would give a shorter
+  snapshot that looks complete and would then be cached for that commit. An archive cut
+  short is a transient error (`GITHUB_UNAVAILABLE`) that can be retried; content that is not
+  a zip, or whose bytes were changed, is a permanent `ARCHIVE_INVALID`.
+- **The download deadline is the request timeout of a separate client for archives.** The
+  request factory's read timeout covers the whole exchange, body included (measured on
+  spring-web 7.0.9: with a 300 ms timeout a body that stalled and a body that trickled without
+  any long pause were both cut at about 300 ms). There is no idle timeout: a server that stops
+  sending holds the connection until the whole deadline runs out. Two clients are needed
+  because one timeout cannot serve both API requests (30 s) and a download (60 s). Three tests
+  pin this behaviour down, because nothing else enforces the deadline: if a later version
+  applied the timeout only up to the response headers, they would fail.
+  The first reason given for a deadline check inside the read loop, that the HTTP client does
+  not limit the response body, was wrong; the measurement disproved it and the check was
+  removed.
+- **The client never retries and never waits.** A failure carries a code, whether it is
+  retryable, and for a rate limit the time GitHub gave. Retrying belongs to the job (M5),
+  which can postpone a review instead of blocking a worker. Rejected: a sleep-and-retry loop
+  in the client; the primary limit can take up to an hour to reset.
+- **One HTTP status per error code**, through the existing `ApiException` handling: 404 for
+  a missing, private or blocked repository, 422 for an empty or oversized one, 503 for a rate
+  limit (this server is limited by GitHub; the caller did nothing wrong), 502 for everything
+  else, timeouts included.
+- **File filter rules live in code, limits in configuration.** The lists of directories,
+  lock files, extensions and markers are constants in `FileFilter`; numbers, timeouts and the
+  token are under `app.github`. Rejected: lists in YAML, because changing one changes the
+  result for a commit that may already be cached, so it should go through a commit and a
+  test. Rejected: an allow-list of known source extensions, which would silently drop
+  languages not on it and files such as `Dockerfile`, SQL and CI configuration.
+- **Documentation and notice files are skipped:** `.md`, `.txt`, `.rst`, `.csv`, `.svg`, and
+  `README`, `LICENSE`, `COPYING`, `NOTICE` and similar names with or without a suffix.
+  `CMakeLists.txt` and `requirements*.txt` are kept because they are build files.
+- **Known limitation: directories are excluded by name at any depth.** Source code in a
+  directory called `build`, `out` or `target` (for example `src/build/Planner.java`) is not
+  reviewed, and the same holds for `debug`, `release`, `external`, `deps`, `vendor` and
+  `dist`. A notice-style name written in upper case with a suffix, such as `README.py`, is
+  skipped too. Rejected: excluding these directories only at the repository root, because a
+  monorepo has `backend/target` and `frontend/dist`.
+- **Tests never call GitHub.** They run against a small HTTP server from the JDK on the
+  loopback interface, and build zip archives, hostile ones included, in memory. Rejected: a
+  mock of the HTTP layer, which would skip redirects, timeouts and streaming; binary archive
+  fixtures in the repository; a mock-server library (a new dependency). One smoke test talks
+  to the real GitHub; it runs only when `GITHUB_LIVE_TEST=true` is set, never in CI.

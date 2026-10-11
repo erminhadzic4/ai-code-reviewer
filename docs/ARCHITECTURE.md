@@ -15,13 +15,15 @@ layers apply.
 com.codereviewer
 ├── auth/        AuthController, AuthService, JwtService, JwtAuthFilter, dto/
 ├── user/        User (entity), UserRepository
-├── github/      GitHubClient, RepoUrlParser, FileFilter, RepoSnapshot, SourceFile
+├── github/      GitHubClient, RepoUrlParser, ArchiveReader, FileFilter, RepoSnapshot, SourceFile,
+│                GitHubProperties (limits and timeouts), GitHubException
 ├── provider/    CodeReviewProvider (interface), FakeReviewProvider, FindingValidator
 │   └── gemini/  GeminiReviewProvider, prompt, response DTOs
 ├── review/      ReviewController, ReviewService, Review, Analysis, Finding,
 │   │            repositories, dto/, ScoreCalculator, FindingLevel
 │   └── job/     ReviewWorker (claims jobs), ReviewPipeline (steps of one review), Chunker
-├── config/      SecurityConfig, OpenApiConfig, ReviewProperties (limits from application.yml)
+├── config/      SecurityConfig, OpenApiConfig, ReviewProperties (limits of the review process,
+│                such as the chunk budget; the GitHub client's limits are in github/GitHubProperties)
 └── common/      GlobalExceptionHandler, error types
 ```
 
@@ -244,19 +246,34 @@ Browser            Backend (HTTP)        Database      Worker             GitHub
    │◄── report ─────────┤                   │              │                 │          │
 ```
 
-1. **Submit.** `RepoUrlParser` accepts only `https://github.com/{owner}/{repo}` (with an
-   optional `.git` suffix or trailing slash). The backend never requests a user-supplied
-   URL; it extracts `owner` and `repo` and builds GitHub API addresses itself. A `QUEUED`
-   row is inserted and 202 is returned.
+1. **Submit.** `RepoUrlParser` accepts only `github.com/{owner}/{repo}`: with `https://`,
+   `http://` or no scheme, an optional `www.`, an optional `.git` suffix and an optional
+   trailing slash. Anything else is rejected, including links to a branch or a file. The
+   backend never requests a user-supplied URL; it extracts `owner` and `repo` and builds
+   GitHub API addresses itself. A `QUEUED` row is inserted and 202 is returned.
 2. **Claim.** `ReviewWorker` polls about once a second for the oldest `QUEUED` row whose
    `run_after` has passed (`SELECT ... FOR UPDATE SKIP LOCKED`) and marks it `RUNNING`.
-3. **Commit and cache.** GitHub returns the default branch, the repository size (oversized
-   repositories are rejected here) and the SHA of the latest commit. If an analysis exists
+3. **Commit and cache.** `GitHubClient.resolveHead` makes two API requests: one for the
+   default branch and the reported repository size, one for the SHA of the latest commit.
+   The reported size is only a coarse guard (see the limits below). If an analysis exists
    for that cache key, the review is linked to it and completed with `cache_hit = true`.
-4. **Fetch.** The repository at that SHA is downloaded as one zip archive and read as a
-   stream, with limits on download size, file count and total uncompressed size.
-   `FileFilter` drops `node_modules`, `target`, `dist`, binaries, lock files, minified and
-   generated code, and oversized files.
+4. **Fetch.** `GitHubClient.fetchSnapshot` makes a third API request, which redirects to
+   the archive host. The repository at that SHA is downloaded as one zip archive and read
+   as a stream by `ArchiveReader`; nothing is written to disk. `FileFilter` drops dependency
+   and build directories, binaries, lock files, documentation, minified and generated code,
+   and oversized files. The result lists the files kept and counts the files skipped by
+   reason.
+
+   | Limit (`app.github.*`) | Default | When crossed |
+   |---|---|---|
+   | `max-repo-size`, as reported by GitHub | 1 GB | review fails, `REPO_TOO_LARGE` |
+   | `max-download-size`, compressed bytes | 50 MB | review fails, `REPO_TOO_LARGE` |
+   | `max-uncompressed-size`, skipped entries included | 200 MB | review fails, `REPO_TOO_LARGE` |
+   | `max-entries` in the archive | 20 000 | review fails, `REPO_TOO_LARGE` |
+   | `max-file-size` of one file | 200 KB | the file is skipped |
+   | `max-files` kept for review | 500 | review fails, `REPO_TOO_LARGE` |
+   | `max-source-size` of the files kept | 2 MB | review fails, `REPO_TOO_LARGE` |
+
 5. **Analyse.** `Chunker` groups files into chunks by a character budget. Every line is
    prefixed with its number so the model can cite lines precisely. For each chunk,
    `CodeReviewProvider.review(chunk)` returns findings as JSON matching a fixed schema.
@@ -266,9 +283,14 @@ Browser            Backend (HTTP)        Database      Worker             GitHub
    discarded and counted.
 7. **Score and store.** `ScoreCalculator` computes the scores; the analysis and its findings
    are saved in one transaction; the review becomes `COMPLETED`.
-8. **Failure.** A transient error (429, 5xx, timeout) increments `attempts`, sets a later
-   `run_after` and returns the row to `QUEUED`, at most three attempts. A permanent error
-   (repository missing, private or too large) sets `FAILED` with an `error_code` at once.
+8. **Failure.** A transient error (a rate limit, 5xx, a timeout or a dropped connection)
+   increments `attempts`, sets a later `run_after` and returns the row to `QUEUED`, at most
+   three attempts. A permanent error (repository missing, private, blocked, empty or too
+   large; an archive that cannot be trusted; a rejected access token) sets `FAILED` with an
+   `error_code` at once. For GitHub the codes are those of `GitHubErrorCode`, and each says
+   whether it is transient: `RATE_LIMITED` and `GITHUB_UNAVAILABLE` are, while
+   `REPO_NOT_FOUND`, `REPO_UNAVAILABLE`, `REPO_EMPTY`, `REPO_TOO_LARGE`, `ARCHIVE_INVALID`
+   and `GITHUB_AUTH_FAILED` are not.
    On startup, rows left in `RUNNING` are returned to `QUEUED`.
 9. **Frontend.** Polls the status every 2 s; on `COMPLETED` it fetches the report, on
    `FAILED` it shows the error.
@@ -279,6 +301,9 @@ A deliberate V1 trade-off. There are two levels of retry:
 
 - **Within a job.** A single HTTP call to GitHub or the model that returns 429 or 5xx is
   repeated after a delay, honouring `Retry-After`. Chunks already finished are not repeated.
+  This belongs to the job (M5). `GitHubClient` itself never retries and never waits: it
+  reports a failure with a code, a flag that says whether trying again can help, and the
+  time GitHub gave for the limit to reset.
 - **The whole job.** If the job still fails, the next attempt starts from scratch: it
   downloads the archive again and sends every chunk to the model again. Chunk results from
   the failed attempt are not kept, so their quota is spent again. Worst case: three
@@ -310,7 +335,7 @@ without an API key. Ollama is outside V1; the interface keeps it possible.
 | One job at a time (configurable) | Parallel jobs | The free model tier limits requests per minute; parallel jobs would starve each other. |
 | No open transaction during HTTP calls | The whole job in one `@Transactional` method | A transaction would hold a database connection for minutes. Three short transactions instead: claim, update progress, save result. |
 | Commit SHA resolved by the worker | Resolved in `POST /api/reviews` | Submit stays fast and independent of GitHub. Cost: a missing repository is reported on the progress screen, not at submit. |
-| One zip archive download | Contents API, file by file | Without a token GitHub allows 60 requests an hour; a 50-file repository would use them at once. The archive needs two requests in total and is read with JDK classes. |
+| One zip archive download | Contents API, file by file | Without a token GitHub allows 60 requests an hour; a 50-file repository would use them at once. The archive needs three requests in total (two when the commit is already cached) and is read with JDK classes. |
 | | `git clone` | Requires `git` in the container and temporary directory management. |
 | Validation with Jackson and Bean Validation | A JSON Schema library | The model already receives the response schema; a second check in Java is enough without a new dependency. |
 
