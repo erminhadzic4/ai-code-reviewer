@@ -1,10 +1,13 @@
 package com.codereviewer.github;
 
+import java.io.FilterInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.regex.Pattern;
@@ -64,6 +67,8 @@ public class GitHubClient {
 	private final GitHubProperties properties;
 	private final Clock clock;
 	private final RestClient http;
+	private final RestClient downloads;
+	private final ArchiveReader archiveReader;
 
 	@Autowired
 	public GitHubClient(GitHubProperties properties) {
@@ -77,9 +82,16 @@ public class GitHubClient {
 				.connectTimeout(properties.connectTimeout())
 				.followRedirects(HttpClient.Redirect.NEVER)
 				.build();
+		this.http = restClient(client, properties.readTimeout());
+		// An archive takes longer than an API answer, so its requests get the longer limit.
+		this.downloads = restClient(client, properties.downloadTimeout());
+		this.archiveReader = new ArchiveReader(properties);
+	}
+
+	private static RestClient restClient(HttpClient client, Duration timeout) {
 		JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(client);
-		requestFactory.setReadTimeout(properties.readTimeout());
-		this.http = RestClient.builder().requestFactory(requestFactory).build();
+		requestFactory.setReadTimeout(timeout);
+		return RestClient.builder().requestFactory(requestFactory).build();
 	}
 
 	/**
@@ -89,7 +101,7 @@ public class GitHubClient {
 	 * GitHub cannot be used right now
 	 */
 	public RepoHead resolveHead(RepoRef repo) {
-		RepositoryResponse repository = get(apiUri("/repos/" + repo.owner() + "/" + repo.name()), JSON,
+		RepositoryResponse repository = get(http, apiUri("/repos/" + repo.owner() + "/" + repo.name()), JSON,
 				response -> response.bodyTo(RepositoryResponse.class));
 		if (repository == null) {
 			throw new GitHubException(GitHubErrorCode.GITHUB_UNAVAILABLE, UNEXPECTED);
@@ -104,13 +116,33 @@ public class GitHubClient {
 		if (repository.sizeInKilobytes() * 1024 > properties.maxRepoSize().toBytes()) {
 			throw new GitHubException(GitHubErrorCode.REPO_TOO_LARGE, "Repository is too large to review");
 		}
-		String sha = get(
+		String sha = get(http,
 				apiUri("/repos/" + current.owner() + "/" + current.name() + "/commits/heads/" + encodeBranch(branch)),
 				SHA, response -> new String(response.getBody().readNBytes(100), StandardCharsets.UTF_8).strip());
 		if (!COMMIT_SHA.matcher(sha).matches()) {
 			throw new GitHubException(GitHubErrorCode.GITHUB_UNAVAILABLE, UNEXPECTED);
 		}
 		return new RepoHead(current, branch, sha);
+	}
+
+	/**
+	 * Downloads the repository at the given commit and keeps the files worth reviewing. One
+	 * API request, which redirects to the archive host. The archive is read as it arrives and
+	 * never stored.
+	 *
+	 * @throws GitHubException if the repository is too large, the archive cannot be trusted or
+	 * GitHub cannot be used right now
+	 */
+	public RepoSnapshot fetchSnapshot(RepoHead head) {
+		if (!COMMIT_SHA.matcher(head.commitSha()).matches()) {
+			throw new IllegalArgumentException("Not a full commit SHA");
+		}
+		RepoRef repo = head.repo();
+		// By SHA, not by branch: a push between the two calls cannot change what is read.
+		URI uri = apiUri("/repos/" + repo.owner() + "/" + repo.name() + "/zipball/" + head.commitSha());
+		long deadline = System.nanoTime() + properties.downloadTimeout().toNanos();
+		return get(downloads, uri, JSON,
+				response -> archiveReader.read(head, new DeadlineStream(response.getBody(), deadline)));
 	}
 
 	private URI apiUri(String path) {
@@ -147,10 +179,10 @@ public class GitHubClient {
 	 * Sends one GET and hands a successful response to {@code reader}. Follows at most
 	 * {@value #MAX_REDIRECTS} redirects, each only to a configured origin.
 	 */
-	private <T> T get(URI uri, String accept, ResponseReader<T> reader) {
+	private <T> T get(RestClient client, URI uri, String accept, ResponseReader<T> reader) {
 		URI target = uri;
 		for (int hop = 0; hop <= MAX_REDIRECTS; hop++) {
-			Outcome<T> outcome = send(target, accept, reader);
+			Outcome<T> outcome = send(client, target, accept, reader);
 			if (outcome.redirect() == null) {
 				return outcome.value();
 			}
@@ -160,10 +192,10 @@ public class GitHubClient {
 		throw new GitHubException(GitHubErrorCode.GITHUB_UNAVAILABLE, UNEXPECTED);
 	}
 
-	private <T> Outcome<T> send(URI target, String accept, ResponseReader<T> reader) {
+	private <T> Outcome<T> send(RestClient client, URI target, String accept, ResponseReader<T> reader) {
 		boolean toApi = sameOrigin(target, properties.apiUrl());
 		try {
-			return http.get().uri(target).headers(headers -> {
+			return client.get().uri(target).headers(headers -> {
 				headers.set(HttpHeaders.ACCEPT, accept);
 				headers.set(HttpHeaders.USER_AGENT, USER_AGENT);
 				if (toApi) {
@@ -267,6 +299,39 @@ public class GitHubClient {
 
 	private static GitHubException notFound() {
 		return new GitHubException(GitHubErrorCode.REPO_NOT_FOUND, "Repository not found or private");
+	}
+
+	/**
+	 * Fails once the whole download has taken too long. The request timeout covers a server
+	 * that stops sending; this covers one that keeps sending, slowly.
+	 */
+	private static final class DeadlineStream extends FilterInputStream {
+
+		private final long deadline;
+
+		DeadlineStream(InputStream in, long deadline) {
+			super(in);
+			this.deadline = deadline;
+		}
+
+		@Override
+		public int read() throws IOException {
+			check();
+			return super.read();
+		}
+
+		@Override
+		public int read(byte[] target, int offset, int length) throws IOException {
+			check();
+			return super.read(target, offset, length);
+		}
+
+		private void check() throws IOException {
+			if (System.nanoTime() - deadline > 0) {
+				throw new IOException("The archive download took too long");
+			}
+		}
+
 	}
 
 	@FunctionalInterface

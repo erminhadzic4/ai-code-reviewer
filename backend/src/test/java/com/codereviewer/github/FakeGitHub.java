@@ -90,7 +90,18 @@ final class FakeGitHub implements AutoCloseable {
 		// A length of 0 means "unknown" to this server, -1 means "no body".
 		exchange.sendResponseHeaders(response.status(), response.body().length == 0 ? -1 : response.body().length);
 		try (OutputStream body = exchange.getResponseBody()) {
-			body.write(response.body());
+			byte[] bytes = response.body();
+			int chunk = response.chunkSize() > 0 ? response.chunkSize() : Math.max(bytes.length, 1);
+			for (int offset = 0; offset < bytes.length; offset += chunk) {
+				if (offset > 0) {
+					Thread.sleep(response.chunkDelay());
+				}
+				body.write(bytes, offset, Math.min(chunk, bytes.length - offset));
+				body.flush();
+			}
+		}
+		catch (InterruptedException ex) {
+			Thread.currentThread().interrupt();
 		}
 		catch (IOException ex) {
 			// The client gave up, which some tests do on purpose.
@@ -106,7 +117,17 @@ final class FakeGitHub implements AutoCloseable {
 
 	}
 
-	record Response(int status, Map<String, String> headers, byte[] body, Duration delay) {
+	record Response(int status, Map<String, String> headers, byte[] body, Duration delay, int chunkSize,
+			Duration chunkDelay) {
+
+		private Response(int status, Map<String, String> headers, byte[] body, Duration delay) {
+			this(status, headers, body, delay, 0, Duration.ZERO);
+		}
+
+		static Response zip(byte[] archive) {
+			return bytes(200, "application/zip", archive);
+		}
+
 
 		static Response json(int status, String body) {
 			return new Response(status, Map.of("Content-Type", "application/json; charset=utf-8"),
@@ -133,11 +154,17 @@ final class FakeGitHub implements AutoCloseable {
 		Response header(String name, String value) {
 			Map<String, String> all = new LinkedHashMap<>(headers);
 			all.put(name, value);
-			return new Response(status, all, body, delay);
+			return new Response(status, all, body, delay, chunkSize, chunkDelay);
 		}
 
+		/** Waits before answering at all. */
 		Response after(Duration delay) {
-			return new Response(status, headers, body, delay);
+			return new Response(status, headers, body, delay, chunkSize, chunkDelay);
+		}
+
+		/** Sends the body in pieces of this size, waiting between them. */
+		Response inChunks(int chunkSize, Duration chunkDelay) {
+			return new Response(status, headers, body, delay, chunkSize, chunkDelay);
 		}
 
 	}
