@@ -1,0 +1,105 @@
+package com.codereviewer.github;
+
+import java.net.URI;
+import java.time.Duration;
+import java.util.Set;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.util.unit.DataSize;
+
+/**
+ * Settings for reading repositories from GitHub. Validated when the application starts.
+ *
+ * <p>The two addresses are the only hosts the client ever talks to. They come from the
+ * configuration, never from a request.
+ *
+ * @param token optional personal access token; without it GitHub allows 60 requests an hour
+ * @param apiUrl origin of the REST API
+ * @param archiveUrl origin the API redirects to for archive downloads
+ * @param connectTimeout time allowed to open a connection
+ * @param readTimeout time allowed to wait for a response
+ * @param downloadTimeout time allowed for a whole archive download
+ * @param maxRepoSize repository size reported by GitHub above which no download is attempted.
+ * That number covers the whole history and is refreshed only now and then, so this is a
+ * coarse guard only; the limits below are the real ones
+ * @param maxDownloadSize compressed bytes of an archive
+ * @param maxUncompressedSize bytes inflated from an archive, skipped entries included
+ * @param maxEntries entries in an archive
+ * @param maxFileSize size above which a single file is skipped
+ * @param maxFiles files kept for review
+ * @param maxSourceSize total size of the files kept for review
+ */
+@ConfigurationProperties("app.github")
+public record GitHubProperties(String token, URI apiUrl, URI archiveUrl, Duration connectTimeout,
+		Duration readTimeout, Duration downloadTimeout, DataSize maxRepoSize, DataSize maxDownloadSize,
+		DataSize maxUncompressedSize, int maxEntries, DataSize maxFileSize, int maxFiles, DataSize maxSourceSize) {
+
+	/** Plain HTTP is accepted only for these hosts, which is what the tests use. */
+	private static final Set<String> LOOPBACK_HOSTS = Set.of("localhost", "127.0.0.1");
+
+	public GitHubProperties {
+		token = (token == null || token.isBlank()) ? null : token.strip();
+		requireOrigin("app.github.api-url", apiUrl);
+		requireOrigin("app.github.archive-url", archiveUrl);
+		requirePositive("app.github.connect-timeout", connectTimeout);
+		requirePositive("app.github.read-timeout", readTimeout);
+		requirePositive("app.github.download-timeout", downloadTimeout);
+		requirePositive("app.github.max-repo-size", maxRepoSize);
+		requirePositive("app.github.max-download-size", maxDownloadSize);
+		requirePositive("app.github.max-uncompressed-size", maxUncompressedSize);
+		requirePositive("app.github.max-entries", maxEntries);
+		requirePositive("app.github.max-file-size", maxFileSize);
+		requirePositive("app.github.max-files", maxFiles);
+		requirePositive("app.github.max-source-size", maxSourceSize);
+		// A file is read into one array, so its limit must fit an int with room to spare.
+		if (maxFileSize.toBytes() > Integer.MAX_VALUE / 2) {
+			throw new IllegalStateException("app.github.max-file-size must be below 1 GB.");
+		}
+	}
+
+	public boolean hasToken() {
+		return token != null;
+	}
+
+	// The generated toString would print the token.
+	@Override
+	public String toString() {
+		return "GitHubProperties[apiUrl=" + apiUrl + ", archiveUrl=" + archiveUrl + ", token="
+				+ (hasToken() ? "set" : "none") + "]";
+	}
+
+	// An origin is scheme, host and optional port: no path, query or user info.
+	private static void requireOrigin(String name, URI url) {
+		if (url == null || url.getHost() == null) {
+			throw new IllegalStateException(name + " must be an absolute URL.");
+		}
+		boolean https = "https".equals(url.getScheme());
+		boolean localHttp = "http".equals(url.getScheme()) && LOOPBACK_HOSTS.contains(url.getHost());
+		if (!https && !localHttp) {
+			throw new IllegalStateException(name + " must use https.");
+		}
+		boolean hasPath = url.getRawPath() != null && !url.getRawPath().isEmpty();
+		if (hasPath || url.getRawQuery() != null || url.getRawFragment() != null || url.getRawUserInfo() != null) {
+			throw new IllegalStateException(name + " must contain only scheme, host and port.");
+		}
+	}
+
+	private static void requirePositive(String name, Duration value) {
+		if (value == null || value.isZero() || value.isNegative()) {
+			throw new IllegalStateException(name + " must be a positive duration.");
+		}
+	}
+
+	private static void requirePositive(String name, DataSize value) {
+		if (value == null || value.toBytes() <= 0) {
+			throw new IllegalStateException(name + " must be a positive size.");
+		}
+	}
+
+	private static void requirePositive(String name, int value) {
+		if (value <= 0) {
+			throw new IllegalStateException(name + " must be positive.");
+		}
+	}
+
+}

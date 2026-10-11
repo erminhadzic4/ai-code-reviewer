@@ -18,6 +18,23 @@ app:
     # No default on purpose: the application refuses to start without a strong secret.
     secret: ${JWT_SECRET:}
     expiration: 24h
+  github:
+    # Optional: without a token GitHub allows 60 API requests an hour, with one 5000.
+    token: ${GITHUB_TOKEN:}
+    api-url: https://api.github.com
+    archive-url: https://codeload.github.com
+    connect-timeout: 5s
+    read-timeout: 30s
+    download-timeout: 60s
+    # Coarse guard only: GitHub's number covers the whole history and is refreshed now and
+    # then (a new repository reports 0). The limits below are the real ones.
+    max-repo-size: 1GB
+    max-download-size: 50MB
+    max-uncompressed-size: 200MB
+    max-entries: 20000
+    max-file-size: 200KB
+    max-files: 500
+    max-source-size: 2MB
 
 management:
   endpoints:
