@@ -24,7 +24,7 @@ import org.springframework.stereotype.Component;
 public class FindingValidator {
 
 	/** A finding that spans more lines than this is about a file, not about a place in it. */
-	static final int MAX_FINDING_LINES = 100;
+	public static final int MAX_FINDING_LINES = 100;
 
 	/** Lines of context shown before and after the lines a finding covers. */
 	private static final int CONTEXT_LINES = 1;
