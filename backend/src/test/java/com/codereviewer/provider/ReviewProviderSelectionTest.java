@@ -15,7 +15,8 @@ import org.springframework.context.annotation.Import;
 class ReviewProviderSelectionTest {
 
 	private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
-			.withUserConfiguration(ProviderConfiguration.class);
+			.withUserConfiguration(ProviderConfiguration.class)
+			.withPropertyValues("app.review.chunk-budget=1000");
 
 	@ParameterizedTest
 	@ValueSource(strings = { "fake", "FAKE" })

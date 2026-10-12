@@ -38,6 +38,9 @@ app:
   review:
     # "fake" returns fixed findings and needs no API key.
     provider: ${REVIEW_PROVIDER:fake}
+    # Characters of source per request, line numbers included; roughly 50 to 70 thousand
+    # tokens. It has to fit the provider's tokens-per-minute limit.
+    chunk-budget: 200000
 
 management:
   endpoints:
