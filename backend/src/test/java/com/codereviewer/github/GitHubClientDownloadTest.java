@@ -9,7 +9,8 @@ import java.util.Arrays;
 import java.util.Map;
 import java.util.Random;
 
-import com.codereviewer.github.FakeGitHub.Response;
+import com.codereviewer.testsupport.FakeHttpServer;
+import com.codereviewer.testsupport.FakeHttpServer.Response;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -24,8 +25,8 @@ class GitHubClientDownloadTest {
 	private static final String JAVA = "class App {\n}\n";
 
 	// Two servers, as in production: the API and the host that serves archives.
-	private final FakeGitHub api = new FakeGitHub();
-	private final FakeGitHub codeload = new FakeGitHub();
+	private final FakeHttpServer api = new FakeHttpServer();
+	private final FakeHttpServer codeload = new FakeHttpServer();
 	private final TestGitHubProperties settings = new TestGitHubProperties();
 
 	GitHubClientDownloadTest() {
@@ -65,7 +66,7 @@ class GitHubClientDownloadTest {
 
 	@Test
 	void redirectToAnotherHostIsNotFollowed() {
-		try (FakeGitHub decoy = new FakeGitHub()) {
+		try (FakeHttpServer decoy = new FakeHttpServer()) {
 			decoy.on(ARCHIVE_PATH, Response.zip(TestZip.repository().file("Evil.java", JAVA).bytes()));
 			api.on(ZIPBALL_PATH, Response.redirect(302, decoy.origin() + ARCHIVE_PATH));
 
@@ -77,7 +78,7 @@ class GitHubClientDownloadTest {
 
 	@Test
 	void secondRedirectIsCheckedToo() {
-		try (FakeGitHub decoy = new FakeGitHub()) {
+		try (FakeHttpServer decoy = new FakeHttpServer()) {
 			codeload.on(ARCHIVE_PATH, Response.redirect(302, decoy.origin() + "/archive.zip"));
 
 			assertFailsWith(GitHubErrorCode.GITHUB_UNAVAILABLE, () -> client().fetchSnapshot(HEAD));
