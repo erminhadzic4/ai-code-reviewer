@@ -4,6 +4,9 @@ package com.codereviewer.provider;
 public enum ProviderType {
 
 	/** Fixed findings, no network and no API key. */
-	FAKE
+	FAKE,
+
+	/** A Gemini model; needs {@code GEMINI_API_KEY}. */
+	GEMINI
 
 }
