@@ -7,10 +7,16 @@ import java.util.UUID;
 
 import com.codereviewer.IntegrationTest;
 import com.codereviewer.github.RepoRef;
+import com.codereviewer.github.SourceFile;
+import com.codereviewer.provider.FakeReviewProvider;
 import com.codereviewer.provider.FindingCategory;
 import com.codereviewer.provider.FindingKind;
+import com.codereviewer.provider.FindingValidator;
 import com.codereviewer.provider.RawFinding;
+import com.codereviewer.provider.ReviewChunk;
 import com.codereviewer.provider.Severity;
+import com.codereviewer.provider.ValidationResult;
+import com.codereviewer.provider.VerifiedFinding;
 import com.codereviewer.user.User;
 import com.codereviewer.user.UserRepository;
 import jakarta.persistence.EntityManager;
@@ -44,6 +50,9 @@ class ReviewPersistenceIntegrationTest {
 
 	@Autowired
 	private JdbcTemplate jdbcTemplate;
+
+	@Autowired
+	private FindingValidator findingValidator;
 
 	@Test
 	void newReviewIsStoredAsAQueuedJob() {
@@ -205,6 +214,24 @@ class ReviewPersistenceIntegrationTest {
 
 		assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM findings WHERE analysis_id = ?", Integer.class,
 				analysis.getId())).isEqualTo(2);
+	}
+
+	@Test
+	void findingsThatPassValidationSatisfyTheConstraintsOfTheTable() {
+		ReviewChunk chunk = new ReviewChunk(List.of(new SourceFile("a.py", "x = 1\n"),
+				new SourceFile("b.py", "a\nb\nc\n"), new SourceFile("c.py", "a\r\nb"), new SourceFile("d.py", "y")));
+		ValidationResult result = findingValidator.validate(chunk, new FakeReviewProvider().review(chunk));
+		Analysis analysis = analysisRepository.saveAndFlush(analysis());
+
+		for (VerifiedFinding verified : result.accepted()) {
+			findingRepository.save(
+					new Finding(analysis, verified.finding(), verified.codeSnippet(), verified.snippetStartLine()));
+		}
+		findingRepository.flush();
+
+		assertThat(result.accepted()).hasSize(5);
+		assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM findings WHERE analysis_id = ?", Integer.class,
+				analysis.getId())).isEqualTo(5);
 	}
 
 	private long savedUserId() {
