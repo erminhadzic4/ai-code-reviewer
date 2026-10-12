@@ -15,12 +15,13 @@ Scope for now: runs locally. Public deployment is a later option (see "Later").
 - [x] M1 Auth: registration, login, JWT, protected endpoints, tests
 - [x] M2 GitHub client: file tree and contents for a public repo; filtering of
       `node_modules`, `target`, binaries, lock files, generated code; handle rate limits
-- [ ] M3 Review domain and `CodeReviewProvider` interface with a fake provider
-      returning fixed findings (lets M5 to M7 work without AI calls)
+- [x] M3 Review domain (tables and entities for reviews, analyses and findings) and
+      `CodeReviewProvider` interface with a fake provider returning fixed findings
+      (lets M5 to M7 work without AI calls)
 - [ ] M4 Gemini provider: prompt, JSON schema, validation, line-number verification,
       chunking of large repos
 - [ ] M5 Async jobs: submit returns a job id, status polling, error handling, retry
-- [ ] M6 Scoring formula, persistence of reviews and findings, cache by commit SHA
+- [ ] M6 Scoring formula, saving analyses and findings, cache by commit SHA
 - [ ] M7 Frontend, following the approved frontend design mockup (dark theme: landing page
       and review report): login/register, submit form, progress screen, report dashboard,
       issue list with filters and diff-style suggestions

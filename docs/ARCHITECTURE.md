@@ -17,10 +17,11 @@ com.codereviewer
 ├── user/        User (entity), UserRepository
 ├── github/      GitHubClient, RepoUrlParser, ArchiveReader, FileFilter, RepoSnapshot, SourceFile,
 │                GitHubProperties (limits and timeouts), GitHubException
-├── provider/    CodeReviewProvider (interface), FakeReviewProvider, FindingValidator
+├── provider/    CodeReviewProvider (interface), ReviewChunk, RawFinding, FakeReviewProvider,
+│   │            FindingValidator, FindingKind, FindingCategory, Severity, ProviderType
 │   └── gemini/  GeminiReviewProvider, prompt, response DTOs
 ├── review/      ReviewController, ReviewService, Review, Analysis, Finding,
-│   │            repositories, dto/, ScoreCalculator, FindingLevel
+│   │            repositories, dto/, ScoreCalculator, FindingLevel, ReviewStatus, ReviewStage
 │   └── job/     ReviewWorker (claims jobs), ReviewPipeline (steps of one review), Chunker
 ├── config/      SecurityConfig, OpenApiConfig, ReviewProperties (limits of the review process,
 │                such as the chunk budget; the GitHub client's limits are in github/GitHubProperties)
@@ -39,6 +40,9 @@ HTTP → Controller → Service → Repository → PostgreSQL
 - **Service**: business rules and transaction boundaries.
 - **Repository**: Spring Data JPA interfaces.
 - **External systems** sit behind their own classes, so tests can replace them with fakes.
+- **Dependencies between features point one way:** `review` → `provider` → `github`. The
+  enums that describe a finding live in `provider`, because both the provider's output and
+  the stored finding use them.
 
 | Decision | Rejected | Why |
 |---|---|---|
@@ -77,27 +81,32 @@ users 1 ──── N reviews N ──── 1 analyses 1 ──── N findin
 |---|---|---|
 | id | UUID, PK | appears in URLs; not guessable |
 | user_id | BIGINT, FK → users, NOT NULL | owner |
-| repo_owner, repo_name | VARCHAR, NOT NULL | lower-case (GitHub names are case-insensitive) |
+| repo_owner, repo_name | VARCHAR(39), VARCHAR(100), NOT NULL | lower-case (GitHub names are case-insensitive) |
 | branch | VARCHAR(255), NULL | default branch, filled by the worker |
 | commit_sha | CHAR(40), NULL | filled by the worker |
 | status | VARCHAR(20), NOT NULL | `QUEUED`, `RUNNING`, `COMPLETED`, `FAILED` |
 | stage | VARCHAR(20), NULL | `FETCHING`, `ANALYZING`, `SCORING` |
-| chunks_done, chunks_total | INT | analysis progress |
+| chunks_done, chunks_total | INT, NOT NULL | analysis progress; 0 of 0 until the chunks are known |
 | attempts | INT, NOT NULL | |
 | run_after | TIMESTAMPTZ, NOT NULL | earliest start time (retry delay) |
-| error_code, error_message | VARCHAR, NULL | e.g. `REPO_NOT_FOUND`, `RATE_LIMITED`, `REPO_TOO_LARGE` |
+| error_code, error_message | VARCHAR(40), VARCHAR(500), NULL | e.g. `REPO_NOT_FOUND`, `RATE_LIMITED`, `REPO_TOO_LARGE` |
 | analysis_id | BIGINT, FK → analyses, NULL | set when completed |
 | cache_hit | BOOLEAN, NOT NULL | result was served from the cache |
 | created_at, started_at, finished_at | TIMESTAMPTZ | |
 
 Indexes: `(user_id, created_at DESC)` for history, `(status, run_after)` for the worker.
 
+Check constraints: a review has an analysis exactly when its status is `COMPLETED`; a
+`FAILED` review has an `error_code`; `0 ≤ chunks_done ≤ chunks_total`; `commit_sha`, when
+set, is 40 lower-case hex characters. Neither foreign key has an `ON DELETE` action, so a
+user or an analysis that a review points to cannot be deleted.
+
 ### analyses
 
 | Column | Type | Notes |
 |---|---|---|
 | id | BIGINT identity, PK | |
-| repo_owner, repo_name, commit_sha | | |
+| repo_owner, repo_name, commit_sha | VARCHAR(39), VARCHAR(100), CHAR(40), NOT NULL | same rules as in `reviews` |
 | provider, model | VARCHAR | e.g. `GEMINI` and the model name |
 | prompt_version | INT | incremented when the prompt changes |
 | overall_score, security_score, maintainability_score, performance_score | SMALLINT, 0 to 100 | computed by the backend |
@@ -129,7 +138,12 @@ model does not serve a stale analysis.
 Check constraint: a row with `kind = 'ISSUE'` must have `severity`, `file_path`,
 `line_start` and `line_end`; a row with `kind = 'GOOD_PRACTICE'` must have a null
 `severity`. A good practice may apply to the whole repository, so its location is optional;
-when present it passes the same line verification.
+when present it passes the same line verification. For every finding, lines come as a pair
+inside a file with `1 ≤ line_start ≤ line_end`, and `code_snippet` and `snippet_start_line`
+are set together.
+
+Index: `(analysis_id)`, because PostgreSQL does not index a foreign key by itself and the
+report reads findings by analysis.
 
 ### Report counters
 
@@ -323,8 +337,18 @@ public interface CodeReviewProvider {
 }
 ```
 
+A `ReviewChunk` is a list of whole files. A `RawFinding` is a finding as reported: kind,
+category, severity, file path, lines, title and texts, none of it checked yet. The snippet
+shown in the report is not part of it; the backend takes it from the file.
+
 Selected with `REVIEW_PROVIDER=fake|gemini`. The default is `fake`, so the app works
-without an API key. Ollama is outside V1; the interface keeps it possible.
+without an API key. A value that names no provider stops the startup; until the Gemini
+provider exists, `fake` is the only one. Ollama is outside V1; the interface keeps it
+possible.
+
+The fake provider is deterministic: the file at position `i` of a chunk gets one of four
+fixed issues (`i` modulo 4, one per severity) on its first lines, and each chunk gets one
+good practice. Its findings point at real files and lines, so they pass line verification.
 
 | Decision | Rejected | Why |
 |---|---|---|
