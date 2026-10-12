@@ -18,7 +18,7 @@ Scope for now: runs locally. Public deployment is a later option (see "Later").
 - [x] M3 Review domain (tables and entities for reviews, analyses and findings) and
       `CodeReviewProvider` interface with a fake provider returning fixed findings
       (lets M5 to M7 work without AI calls)
-- [ ] M4 Gemini provider: prompt, JSON schema, validation, line-number verification,
+- [x] M4 Gemini provider: prompt, JSON schema, validation, line-number verification,
       chunking of large repos
 - [ ] M5 Async jobs: submit returns a job id, status polling, error handling, retry
 - [ ] M6 Scoring formula, saving analyses and findings, cache by commit SHA

@@ -1,4 +1,4 @@
-package com.codereviewer.github;
+package com.codereviewer.testsupport;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -20,22 +20,22 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
 /**
- * A stand-in for GitHub: a real HTTP server on the loopback interface, built on the JDK's
- * own server. Tests program the answer for each path and inspect what was received, so the
+ * A stand-in for an external HTTP API: a real server on the loopback interface, built on the
+ * JDK's own server. Tests program the answer for each path and inspect what was received, so the
  * client's real HTTP code runs (redirects, timeouts, streaming) without touching the network.
  */
-final class FakeGitHub implements AutoCloseable {
+public final class FakeHttpServer implements AutoCloseable {
 
 	private final HttpServer server;
 	private final ExecutorService executor = Executors.newCachedThreadPool(runnable -> {
-		Thread thread = new Thread(runnable, "fake-github");
+		Thread thread = new Thread(runnable, "fake-http-server");
 		thread.setDaemon(true);
 		return thread;
 	});
 	private final Map<String, Response> responses = new ConcurrentHashMap<>();
 	private final List<Request> requests = new CopyOnWriteArrayList<>();
 
-	FakeGitHub() {
+	public FakeHttpServer() {
 		try {
 			server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
 		}
@@ -47,21 +47,21 @@ final class FakeGitHub implements AutoCloseable {
 		server.start();
 	}
 
-	URI origin() {
+	public URI origin() {
 		return URI.create("http://127.0.0.1:" + server.getAddress().getPort());
 	}
 
 	/** Programs the answer for a path, given exactly as it appears on the wire. */
-	FakeGitHub on(String rawPath, Response response) {
+	public FakeHttpServer on(String rawPath, Response response) {
 		responses.put(rawPath, response);
 		return this;
 	}
 
-	List<Request> requests() {
+	public List<Request> requests() {
 		return List.copyOf(requests);
 	}
 
-	List<String> requestedPaths() {
+	public List<String> requestedPaths() {
 		return requests.stream().map(Request::rawPath).toList();
 	}
 
@@ -75,7 +75,9 @@ final class FakeGitHub implements AutoCloseable {
 		URI uri = exchange.getRequestURI();
 		Map<String, String> headers = new LinkedHashMap<>();
 		exchange.getRequestHeaders().forEach((name, values) -> headers.put(name.toLowerCase(), values.get(0)));
-		requests.add(new Request(uri.getRawPath(), uri.getRawQuery(), headers));
+		String requestBody = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+		requests.add(new Request(exchange.getRequestMethod(), uri.getRawPath(), uri.getRawQuery(), headers,
+				requestBody));
 
 		Response response = responses.getOrDefault(uri.getRawPath(), Response.json(404, "{\"message\":\"Not Found\"}"));
 		try {
@@ -108,62 +110,63 @@ final class FakeGitHub implements AutoCloseable {
 		}
 	}
 
-	/** One received request. Header names are lower-case. */
-	record Request(String rawPath, String rawQuery, Map<String, String> headers) {
+	/** One received request. Header names are lower-case; the body is empty for a GET. */
+	public record Request(String method, String rawPath, String rawQuery, Map<String, String> headers,
+			String body) {
 
-		String header(String name) {
+		public String header(String name) {
 			return headers.get(name.toLowerCase());
 		}
 
 	}
 
-	record Response(int status, Map<String, String> headers, byte[] body, Duration delay, int chunkSize,
+	public record Response(int status, Map<String, String> headers, byte[] body, Duration delay, int chunkSize,
 			Duration chunkDelay) {
 
 		private Response(int status, Map<String, String> headers, byte[] body, Duration delay) {
 			this(status, headers, body, delay, 0, Duration.ZERO);
 		}
 
-		static Response zip(byte[] archive) {
+		public static Response zip(byte[] archive) {
 			return bytes(200, "application/zip", archive);
 		}
 
 
-		static Response json(int status, String body) {
+		public static Response json(int status, String body) {
 			return new Response(status, Map.of("Content-Type", "application/json; charset=utf-8"),
 					body.getBytes(StandardCharsets.UTF_8), Duration.ZERO);
 		}
 
-		static Response text(int status, String body) {
+		public static Response text(int status, String body) {
 			return new Response(status, Map.of("Content-Type", "text/plain; charset=utf-8"),
 					body.getBytes(StandardCharsets.UTF_8), Duration.ZERO);
 		}
 
-		static Response bytes(int status, String contentType, byte[] body) {
+		public static Response bytes(int status, String contentType, byte[] body) {
 			return new Response(status, Map.of("Content-Type", contentType), body, Duration.ZERO);
 		}
 
-		static Response status(int status) {
+		public static Response status(int status) {
 			return new Response(status, Map.of(), new byte[0], Duration.ZERO);
 		}
 
-		static Response redirect(int status, String location) {
+		public static Response redirect(int status, String location) {
 			return status(status).header("Location", location);
 		}
 
-		Response header(String name, String value) {
+		public Response header(String name, String value) {
 			Map<String, String> all = new LinkedHashMap<>(headers);
 			all.put(name, value);
 			return new Response(status, all, body, delay, chunkSize, chunkDelay);
 		}
 
 		/** Waits before answering at all. */
-		Response after(Duration delay) {
+		public Response after(Duration delay) {
 			return new Response(status, headers, body, delay, chunkSize, chunkDelay);
 		}
 
 		/** Sends the body in pieces of this size, waiting between them. */
-		Response inChunks(int chunkSize, Duration chunkDelay) {
+		public Response inChunks(int chunkSize, Duration chunkDelay) {
 			return new Response(status, headers, body, delay, chunkSize, chunkDelay);
 		}
 

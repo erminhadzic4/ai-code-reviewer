@@ -15,6 +15,12 @@ public interface CodeReviewProvider {
 	String model();
 
 	/**
+	 * The version of the instructions the provider gives its model. It is part of the cache
+	 * key, so it must change whenever a change to them can change the findings.
+	 */
+	int promptVersion();
+
+	/**
 	 * Reviews one chunk. The findings are returned as reported; checking them is the
 	 * caller's job.
 	 */

@@ -235,3 +235,105 @@ Full reasoning and rejected alternatives are in `ARCHITECTURE.md`. The main deci
 - **Schema tests and mapping tests are separate classes.** One writes rows with SQL and
   checks each constraint by name; the other writes and reads through the entities, which
   proves they match the migration (Hibernate runs in validate mode).
+
+## 2026-10-12: M4 Gemini provider
+- **Model: `gemini-3.5-flash-lite`**, chosen by its free limits. The limits are not in the
+  API documentation; they are per Google project and shown in AI Studio. Read there on
+  2026-10-12 for this project's free tier (Google can change them at any time):
+
+  | Models | Requests a minute | Tokens a minute | Requests a day |
+  |---|---|---|---|
+  | Gemini 3.5 Flash-Lite, 3.1 Flash-Lite | 15 | 250 000 | 500 |
+  | Gemini 3.5 to 3.8 Flash | 5 | 250 000 | 20 |
+  | Gemini 2.5 Flash-Lite | 10 | 250 000 | 20 |
+  | Gemma 4 (26B, 31B) | 30 | 16 000 | 14 400 |
+  | Pro models | not available | | |
+
+  Rejected: the models with 20 requests a day, because one large repository would use up the
+  day; Gemma, because 16 000 tokens a minute cannot take one chunk. The model stays
+  configurable (`GEMINI_MODEL`).
+- **The API key must belong to a Google project without billing.** On the free tier a call
+  costs nothing; in a project with billing every call is charged, which would break the rule
+  that this project costs nothing. The application cannot check this, so it is stated here
+  and in `.env.example`.
+- **On the free tier Google may use the submitted content to improve its products.**
+  Accepted, because only public repositories are ever read (a private one is refused even
+  when the GitHub token could read it). The request also sets `store: false`, so the API does
+  not keep the interaction.
+- **Interactions API** (`POST /v1beta/interactions`). Rejected: `generateContent`, which the
+  documentation now calls legacy and no longer describes for structured output.
+- **Chunk budget: 200 000 characters, counted on the numbered text.** Measured on this
+  project's own Java sources: 199 897 characters were 71 353 input tokens, 2.8 characters per
+  token, so three full chunks a minute fit the limit. Pacing the requests belongs to the job
+  (M5). Rejected: a budget in tokens, which needs a tokenizer (a new dependency).
+- **A file is never split and never left out.** A file larger than the budget is a chunk of
+  its own; the model's context is far larger. Rejected: splitting by lines (a finding loses
+  its context); skipping the file (a review that silently covers part of a repository).
+- **Line numbers are added when the text for the model is made, not in the chunk.** A chunk
+  keeps whole, unchanged files, so the validator and the snippet read the real content.
+  Rejected: numbered text inside the chunk, which every other reader would have to strip.
+- **One definition of a line, `SourceFile.lines()`** (the JDK's `String.lines()`), used by
+  the numbering, the line check, the snippet and the fake provider. Rejected: splitting on
+  `\n`, which keeps `\r` and counts an empty last line.
+- **`promptVersion()` on the provider interface,** a constant next to the instructions.
+  Rejected: a number in the configuration, which can drift from the prompt.
+- **Mapping of errors was written against recorded answers, not the documentation.** The raw
+  REST answers are not shown there, and several differ from it:
+
+  | Case | Documentation | Observed |
+  |---|---|---|
+  | invalid key | 401, code `authentication` | 400; an array around an object with `status: INVALID_ARGUMENT` and the reason `API_KEY_INVALID` |
+  | unknown model | 404, code `model_not_found` | 404, code `not_found` |
+  | answer cut at the output limit | status `incomplete` | HTTP 200, `status: incomplete`, the partial text present |
+  | successful answer | not shown | text in `steps[type = model_output].content[type = text].text`, after a `thought` step |
+
+  So an invalid key is recognised from the body before a 400 is taken for a mistake in the
+  request, and the error reader accepts both shapes. The recorded answers are test fixtures
+  (`backend/src/test/resources/gemini/`). A rate limit, a server error and blocked content
+  could not be produced on purpose; their handling follows the documentation.
+- **At most 15 findings per chunk.** The API rejected the schema with nullable fields and
+  `maxItems` 20 (`invalid_request`, no explanation); it accepted 15, 12, 10 and no `maxItems`
+  at all; 16 to 19 were not tried. Rejected: optional instead of nullable fields, which the
+  API accepts with 20 but which made the model leave `lineEnd` out of every issue even when
+  told not to; no `maxItems`, which leaves nothing but the instructions to bound the answer.
+- **The longest answer the validator accepts fits the output limit.** 15 findings, title up
+  to 200 characters, explanation and suggestion up to 800, suggested code up to 2400: about
+  69 000 characters, under 28 000 tokens even at 2.5 characters per token, against a limit of
+  32 768. The instructions ask for less (80, 500, 500 and 40 lines). Rejected: only raising
+  the limit. The first plan allowed 40 findings with far longer texts and could not have fit.
+- **A truncated answer is not salvaged.** The provider reports `PROVIDER_OUTPUT_TRUNCATED`
+  and uses nothing of it. Rejected: reading the complete findings out of unfinished JSON (the
+  list would be silently incomplete); the continuation token (more requests and state for a
+  case the limits already prevent). What the job does with such a chunk is decided in M5.
+- **`FindingValidator` is the only place a finding is dropped.** The Gemini reader keeps a
+  finding it cannot read as an empty one, so that the validator drops and counts it. A
+  finding with one unreadable field (unknown value, wrong type) is unreadable as a whole;
+  reading the rest would turn a wrong value into a missing one, and a missing value can be a
+  valid finding. Rejected: dropping in the reader, which would need a second counter.
+- **Rules for one field are Bean Validation constraints on `RawFinding`; rules across fields
+  are code** in the validator (the shape of each kind, lines inside the file). Rejected: a
+  JSON Schema library (a new dependency); a class-level custom constraint.
+- **A finding that fails is dropped, never repaired,** not even by shortening a title.
+  Rejected: truncating, because truncated suggested code is not code.
+- **The path of a finding must equal a path of the chunk exactly.** `./a.py` is not `a.py`.
+  Rejected: normalising, which could attach a finding to a file it was not written for.
+- **A finding spans at most 100 lines.** Longer is about a file, not a place in it, and its
+  snippet would be most of the file. The instructions state the same number.
+- **The validator returns `VerifiedFinding`, not the entity.** `provider` must not depend on
+  `review`. `findings_discarded` is the sum of the validator's counts over the chunks; the
+  job adds them up.
+- **The same good-practice title is counted once in M6, not here.** It is a rule of the
+  report over the whole repository; the validator sees one chunk.
+- **`ProviderException` and `ProviderErrorCode` are not specific to Gemini,** so the job
+  handles one type for any provider. The daily quota is not retryable although it passes by
+  itself: it returns at midnight Pacific time, far later than any retry of a job.
+- **The key is required only when Gemini is selected,** and checked by the provider when it
+  is created. The settings are read for every provider, so they cannot demand it.
+- **No `temperature` and no thinking level in the request.** The documentation advises the
+  default temperature for this model family, and the recorded answers show about 19 tokens
+  beyond the visible output counted against the limit, which is negligible.
+- **The fake HTTP server is shared by the GitHub and the Gemini tests,** and the check that
+  a configured address is an https origin is shared by both settings classes. Rejected: a
+  second copy of each.
+- **Tests never call Gemini.** Two live tests run only with `GEMINI_LIVE_TEST=true` and a
+  key, never in CI; each costs one request.

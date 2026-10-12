@@ -9,8 +9,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 
-import com.codereviewer.github.FakeGitHub.Request;
-import com.codereviewer.github.FakeGitHub.Response;
+import com.codereviewer.testsupport.FakeHttpServer;
+import com.codereviewer.testsupport.FakeHttpServer.Request;
+import com.codereviewer.testsupport.FakeHttpServer.Response;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -31,7 +32,7 @@ class GitHubClientTest {
 	private static final String SHA = "0123abc0123abc0123abc0123abc0123abc0123a";
 	private static final Instant NOW = Instant.parse("2026-10-11T10:00:00Z");
 
-	private final FakeGitHub github = new FakeGitHub();
+	private final FakeHttpServer github = new FakeHttpServer();
 	private final TestGitHubProperties settings = new TestGitHubProperties();
 
 	GitHubClientTest() {
@@ -282,7 +283,7 @@ class GitHubClientTest {
 
 	@Test
 	void redirectToAnotherHostIsNotFollowed() {
-		try (FakeGitHub decoy = new FakeGitHub()) {
+		try (FakeHttpServer decoy = new FakeHttpServer()) {
 			decoy.on(REPO_PATH, repository("octo/demo", "main", 1, false));
 			settings.token = "ghp_example";
 			github.on(REPO_PATH, Response.redirect(302, decoy.origin() + REPO_PATH));

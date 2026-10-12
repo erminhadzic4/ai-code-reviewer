@@ -2,8 +2,8 @@ package com.codereviewer.github;
 
 import java.net.URI;
 import java.time.Duration;
-import java.util.Set;
 
+import com.codereviewer.common.Origins;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.util.unit.DataSize;
 
@@ -35,13 +35,10 @@ public record GitHubProperties(String token, URI apiUrl, URI archiveUrl, Duratio
 		Duration readTimeout, Duration downloadTimeout, DataSize maxRepoSize, DataSize maxDownloadSize,
 		DataSize maxUncompressedSize, int maxEntries, DataSize maxFileSize, int maxFiles, DataSize maxSourceSize) {
 
-	/** Plain HTTP is accepted only for these hosts, which is what the tests use. */
-	private static final Set<String> LOOPBACK_HOSTS = Set.of("localhost", "127.0.0.1");
-
 	public GitHubProperties {
 		token = (token == null || token.isBlank()) ? null : token.strip();
-		requireOrigin("app.github.api-url", apiUrl);
-		requireOrigin("app.github.archive-url", archiveUrl);
+		Origins.requireOrigin("app.github.api-url", apiUrl);
+		Origins.requireOrigin("app.github.archive-url", archiveUrl);
 		requirePositive("app.github.connect-timeout", connectTimeout);
 		requirePositive("app.github.read-timeout", readTimeout);
 		requirePositive("app.github.download-timeout", downloadTimeout);
@@ -67,22 +64,6 @@ public record GitHubProperties(String token, URI apiUrl, URI archiveUrl, Duratio
 	public String toString() {
 		return "GitHubProperties[apiUrl=" + apiUrl + ", archiveUrl=" + archiveUrl + ", token="
 				+ (hasToken() ? "set" : "none") + "]";
-	}
-
-	// An origin is scheme, host and optional port: no path, query or user info.
-	private static void requireOrigin(String name, URI url) {
-		if (url == null || url.getHost() == null) {
-			throw new IllegalStateException(name + " must be an absolute URL.");
-		}
-		boolean https = "https".equals(url.getScheme());
-		boolean localHttp = "http".equals(url.getScheme()) && LOOPBACK_HOSTS.contains(url.getHost());
-		if (!https && !localHttp) {
-			throw new IllegalStateException(name + " must use https.");
-		}
-		boolean hasPath = url.getRawPath() != null && !url.getRawPath().isEmpty();
-		if (hasPath || url.getRawQuery() != null || url.getRawFragment() != null || url.getRawUserInfo() != null) {
-			throw new IllegalStateException(name + " must contain only scheme, host and port.");
-		}
 	}
 
 	private static void requirePositive(String name, Duration value) {

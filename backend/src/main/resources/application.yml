@@ -35,9 +35,24 @@ app:
     max-file-size: 200KB
     max-files: 500
     max-source-size: 2MB
+  gemini:
+    # Needed only when the provider is "gemini". Use a key of a Google project without
+    # billing: on the free tier a call costs nothing, with billing every call is charged.
+    api-key: ${GEMINI_API_KEY:}
+    model: ${GEMINI_MODEL:gemini-3.5-flash-lite}
+    api-url: https://generativelanguage.googleapis.com
+    connect-timeout: 5s
+    read-timeout: 120s
+    # The longest answer the validator accepts stays below this.
+    max-output-tokens: 32768
+    max-response-size: 2MB
   review:
     # "fake" returns fixed findings and needs no API key.
     provider: ${REVIEW_PROVIDER:fake}
+    # Characters of source per request, line numbers included. A full chunk of Java measured
+    # about 71 thousand tokens (2.8 characters per token); it has to fit the provider's
+    # tokens-per-minute limit.
+    chunk-budget: 200000
 
 management:
   endpoints:

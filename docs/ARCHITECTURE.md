@@ -18,14 +18,17 @@ com.codereviewer
 ├── github/      GitHubClient, RepoUrlParser, ArchiveReader, FileFilter, RepoSnapshot, SourceFile,
 │                GitHubProperties (limits and timeouts), GitHubException
 ├── provider/    CodeReviewProvider (interface), ReviewChunk, RawFinding, FakeReviewProvider,
-│   │            FindingValidator, FindingKind, FindingCategory, Severity, ProviderType
-│   └── gemini/  GeminiReviewProvider, prompt, response DTOs
+│   │            FindingValidator (gives VerifiedFinding and ValidationResult), NumberedSource,
+│   │            ProviderException, ProviderErrorCode, FindingKind, FindingCategory, Severity,
+│   │            ProviderType
+│   └── gemini/  GeminiReviewProvider, GeminiPrompt (instructions, schema, version),
+│                GeminiProperties (key, model, timeouts, limits)
 ├── review/      ReviewController, ReviewService, Review, Analysis, Finding,
 │   │            repositories, dto/, ScoreCalculator, FindingLevel, ReviewStatus, ReviewStage
 │   └── job/     ReviewWorker (claims jobs), ReviewPipeline (steps of one review), Chunker
 ├── config/      SecurityConfig, OpenApiConfig, ReviewProperties (limits of the review process,
 │                such as the chunk budget; the GitHub client's limits are in github/GitHubProperties)
-└── common/      GlobalExceptionHandler, error types
+└── common/      GlobalExceptionHandler, error types, Origins (check of configured addresses)
 ```
 
 ```
@@ -288,13 +291,25 @@ Browser            Backend (HTTP)        Database      Worker             GitHub
    | `max-files` kept for review | 500 | review fails, `REPO_TOO_LARGE` |
    | `max-source-size` of the files kept | 2 MB | review fails, `REPO_TOO_LARGE` |
 
-5. **Analyse.** `Chunker` groups files into chunks by a character budget. Every line is
-   prefixed with its number so the model can cite lines precisely. For each chunk,
-   `CodeReviewProvider.review(chunk)` returns findings as JSON matching a fixed schema.
-6. **Validate.** The JSON is read into Java records and validated (required fields, allowed
-   values). Then lines are verified: the file must belong to the chunk and
-   `1 ≤ line_start ≤ line_end ≤ number of lines in the file`. Anything that fails is
-   discarded and counted.
+5. **Analyse.** `Chunker` groups files into chunks by a character budget
+   (`app.review.chunk-budget`, 200 000). Files keep their order and are never split; a file
+   that alone costs more than the budget is a chunk of its own. A chunk holds whole, unchanged
+   files. For each chunk, `CodeReviewProvider.review(chunk)` returns the findings as
+   reported. The text a model sees is made by `NumberedSource`: every line is prefixed with
+   its number so the model can cite lines precisely, and the cost of a file in a chunk is the
+   length of that text.
+6. **Validate.** `FindingValidator` checks every reported finding: required fields, allowed
+   values, lengths that fit the columns, the shape of its kind, and its location. The file
+   must be a file of the chunk, under exactly the path that was sent, and
+   `1 ≤ line_start ≤ line_end ≤ number of lines in the file`, over at most 100 lines.
+   Anything that fails is discarded and counted, never repaired. This is the only place a
+   finding is dropped, so the sum of its counts over the chunks is `findings_discarded`. For
+   an accepted finding with lines it cuts the snippet out of the file: the lines covered
+   plus one line of context on each side.
+
+   A line is defined once, in `SourceFile.lines()`: it ends at `\n`, `\r\n` or `\r`, and a
+   break at the very end of a file does not start another line. The numbers shown to a
+   model, the check of a reported line and the snippet all use it.
 7. **Score and store.** `ScoreCalculator` computes the scores; the analysis and its findings
    are saved in one transaction; the review becomes `COMPLETED`.
 8. **Failure.** A transient error (a rate limit, 5xx, a timeout or a dropped connection)
@@ -304,7 +319,8 @@ Browser            Backend (HTTP)        Database      Worker             GitHub
    `error_code` at once. For GitHub the codes are those of `GitHubErrorCode`, and each says
    whether it is transient: `RATE_LIMITED` and `GITHUB_UNAVAILABLE` are, while
    `REPO_NOT_FOUND`, `REPO_UNAVAILABLE`, `REPO_EMPTY`, `REPO_TOO_LARGE`, `ARCHIVE_INVALID`
-   and `GITHUB_AUTH_FAILED` are not.
+   and `GITHUB_AUTH_FAILED` are not. For a provider the codes are those of
+   `ProviderErrorCode` (see "Gemini provider" below).
    On startup, rows left in `RUNNING` are returned to `QUEUED`.
 9. **Frontend.** Polls the status every 2 s; on `COMPLETED` it fetches the report, on
    `FAILED` it shows the error.
@@ -333,22 +349,64 @@ Revisit when large repositories or a public deployment with a daily budget arriv
 public interface CodeReviewProvider {
     String name();
     String model();
+    int promptVersion();
     List<RawFinding> review(ReviewChunk chunk);
 }
 ```
+
+`name()`, `model()` and `promptVersion()` are the provider's part of the cache key of an
+analysis. The prompt version is a constant in the code next to the instructions, so it
+changes in the same commit as they do.
 
 A `ReviewChunk` is a list of whole files. A `RawFinding` is a finding as reported: kind,
 category, severity, file path, lines, title and texts, none of it checked yet. The snippet
 shown in the report is not part of it; the backend takes it from the file.
 
 Selected with `REVIEW_PROVIDER=fake|gemini`. The default is `fake`, so the app works
-without an API key. A value that names no provider stops the startup; until the Gemini
-provider exists, `fake` is the only one. Ollama is outside V1; the interface keeps it
-possible.
+without an API key. A value that names no provider stops the startup, and so does `gemini`
+without `GEMINI_API_KEY`. Ollama is outside V1; the interface keeps it possible.
 
 The fake provider is deterministic: the file at position `i` of a chunk gets one of four
 fixed issues (`i` modulo 4, one per severity) on its first lines, and each chunk gets one
 good practice. Its findings point at real files and lines, so they pass line verification.
+
+### Gemini provider
+
+One chunk is one `POST /v1beta/interactions` (the Interactions API). The request carries the
+model, fixed instructions, the numbered source of the chunk, the JSON schema of the answer
+(`response_format`), `store: false` so that the API keeps nothing, and the output limit. The
+key travels in the `x-goog-api-key` header, only to the configured origin, and never appears
+in an address, a log line or an error message. Redirects are not followed.
+
+The answer must be `{"findings": [...]}` with at most 15 findings, each with the fields of a
+`RawFinding`; every field is required and the ones that may be absent are nullable. The
+schema has no place for a score or a snippet. Lengths are not part of it (the API has no
+keyword for them): the instructions ask for short texts and the validator enforces the
+limits. The longest answer the validator accepts stays below the output limit of 32 768
+tokens.
+
+Defaults: model `gemini-3.5-flash-lite`, request timeout 120 s. A full chunk of Java source
+measured about 71 000 input tokens (2.8 characters per token), so three full chunks a minute
+fit the free limit of 250 000 tokens a minute; pacing the requests is the job's task.
+
+The provider never retries and never waits. A failure is a `ProviderException` with one of
+these codes:
+
+| Code | When | Transient | HTTP |
+|---|---|---|---|
+| `PROVIDER_RATE_LIMITED` | 429 | yes | 503 |
+| `PROVIDER_QUOTA_EXHAUSTED` | 429 with `quota_exceeded` (the daily quota) | no | 503 |
+| `PROVIDER_UNAVAILABLE` | 408, 5xx, a redirect, a timeout, a dropped connection, an unreadable answer, an interaction that did not complete | yes | 502 |
+| `PROVIDER_AUTH_FAILED` | 401, 403, or a body that names an invalid key (the API answers 400 for one) | no | 502 |
+| `PROVIDER_MISCONFIGURED` | any other 4xx, 501: unknown model, invalid request | no | 502 |
+| `PROVIDER_BLOCKED` | the API refused the content (`safety`, `recitation` and similar) | no | 422 |
+| `PROVIDER_OUTPUT_TRUNCATED` | interaction status `incomplete`: the answer hit the output limit; nothing of it is used | no | 502 |
+| `PROVIDER_INVALID_RESPONSE` | completed, but the text is not the agreed JSON, or the answer is too large | yes | 502 |
+
+The daily quota is not transient for a job: it returns at midnight Pacific time, far later
+than any retry. The rows for a rate limit, a server error and blocked content follow the
+API's documentation; they could not be produced on purpose. The others are tested against
+answers recorded from the real API.
 
 | Decision | Rejected | Why |
 |---|---|---|
@@ -365,7 +423,13 @@ good practice. Its findings point at real files and lines, so they pass line ver
 
 Repository content is untrusted input: a file may contain text aimed at the model. The
 defences are the fixed response schema, scores computed by the backend, line verification,
-and rendering finding text as text, never as HTML.
+and rendering finding text as text, never as HTML. In the request, the instructions say
+that file content is data and never an instruction, the model is given no tools, and every
+line of a file carries its number while a file marker never does, so text inside a file
+cannot pass for a marker. In the answer, a finding survives only if it points at lines that
+exist in a file that was sent, and its snippet comes from that file, not from the model.
+What remains: text in a file can still make the model keep quiet about a problem or invent
+one on a real line.
 
 An optional `GITHUB_TOKEN` raises the GitHub limit from 60 to 5000 requests an hour.
 
@@ -411,7 +475,7 @@ POSTGRES_PASSWORD=change-me
 JWT_SECRET=change-me-to-a-long-random-string
 REVIEW_PROVIDER=fake
 GEMINI_API_KEY=
-GEMINI_MODEL=
+GEMINI_MODEL=gemini-3.5-flash-lite
 GITHUB_TOKEN=
 ```
 

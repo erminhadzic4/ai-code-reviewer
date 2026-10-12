@@ -23,6 +23,9 @@ public class FakeReviewProvider implements CodeReviewProvider {
 
 	static final String MODEL = "fake-1";
 
+	/** Raise it when the fixed findings below change. */
+	static final int PROMPT_VERSION = 1;
+
 	/** An issue covers at most this many lines from the top of its file. */
 	private static final int MAX_ISSUE_LINES = 2;
 
@@ -56,12 +59,17 @@ public class FakeReviewProvider implements CodeReviewProvider {
 	}
 
 	@Override
+	public int promptVersion() {
+		return PROMPT_VERSION;
+	}
+
+	@Override
 	public List<RawFinding> review(ReviewChunk chunk) {
 		List<RawFinding> findings = new ArrayList<>();
 		List<SourceFile> files = chunk.files();
 		for (int i = 0; i < files.size(); i++) {
 			SourceFile file = files.get(i);
-			int lines = (int) file.content().lines().count();
+			int lines = file.lines().size();
 			if (lines == 0) {
 				continue;
 			}
