@@ -50,7 +50,7 @@ class FakeReviewProviderTest {
 				new SourceFile("src/Windows.cs", "a\r\nb\r\nc\r\n"),
 				new SourceFile("src/Long.py", "x\n".repeat(500))));
 		Map<String, Integer> lineCounts = chunk.files().stream()
-				.collect(Collectors.toMap(SourceFile::path, file -> (int) file.content().lines().count()));
+				.collect(Collectors.toMap(SourceFile::path, file -> file.lines().size()));
 
 		List<RawFinding> issues = issuesOf(provider.review(chunk));
 

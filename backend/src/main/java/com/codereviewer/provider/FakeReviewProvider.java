@@ -61,7 +61,7 @@ public class FakeReviewProvider implements CodeReviewProvider {
 		List<SourceFile> files = chunk.files();
 		for (int i = 0; i < files.size(); i++) {
 			SourceFile file = files.get(i);
-			int lines = (int) file.content().lines().count();
+			int lines = file.lines().size();
 			if (lines == 0) {
 				continue;
 			}
