@@ -117,8 +117,9 @@ class GeminiPromptTest {
 		int perFinding = RawFinding.MAX_TITLE_LENGTH + 2 * RawFinding.MAX_TEXT_LENGTH + RawFinding.MAX_CODE_LENGTH
 				+ 200 + 200;
 		int characters = GeminiPrompt.MAX_FINDINGS * perFinding;
-		// Pessimistic: code and JSON take more tokens per character than prose.
-		int tokens = characters / 3;
+		// 2.5 characters per token. Measured on numbered Java source: 2.8 (199897 characters
+		// were 71353 tokens); prose takes fewer tokens than that.
+		int tokens = characters * 10 / 25;
 
 		assertThat(tokens).isLessThan(32_768);
 	}
