@@ -23,6 +23,9 @@ public class FakeReviewProvider implements CodeReviewProvider {
 
 	static final String MODEL = "fake-1";
 
+	/** Raise it when the fixed findings below change. */
+	static final int PROMPT_VERSION = 1;
+
 	/** An issue covers at most this many lines from the top of its file. */
 	private static final int MAX_ISSUE_LINES = 2;
 
@@ -53,6 +56,11 @@ public class FakeReviewProvider implements CodeReviewProvider {
 	@Override
 	public String model() {
 		return MODEL;
+	}
+
+	@Override
+	public int promptVersion() {
+		return PROMPT_VERSION;
 	}
 
 	@Override

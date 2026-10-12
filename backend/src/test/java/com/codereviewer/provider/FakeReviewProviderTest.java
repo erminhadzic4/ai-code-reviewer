@@ -105,9 +105,10 @@ class FakeReviewProviderTest {
 	}
 
 	@Test
-	void nameAndModelIdentifyTheFake() {
+	void nameModelAndPromptVersionIdentifyTheFake() {
 		assertThat(provider.name()).isEqualTo("FAKE");
 		assertThat(provider.model()).isEqualTo("fake-1");
+		assertThat(provider.promptVersion()).isEqualTo(1);
 	}
 
 	private static List<RawFinding> issuesOf(List<RawFinding> findings) {
