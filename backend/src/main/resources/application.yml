@@ -35,6 +35,9 @@ app:
     max-file-size: 200KB
     max-files: 500
     max-source-size: 2MB
+  review:
+    # "fake" returns fixed findings and needs no API key.
+    provider: ${REVIEW_PROVIDER:fake}
 
 management:
   endpoints:
