@@ -47,8 +47,8 @@ class GeminiPromptTest {
 
 	@Test
 	void instructionsStateTheLimitOfFindingsThatTheSchemaEnforces() {
-		assertThat(GeminiPrompt.SYSTEM_INSTRUCTION).contains("Report at most 20 findings");
-		assertThat(findings()).containsEntry("maxItems", 20);
+		assertThat(GeminiPrompt.SYSTEM_INSTRUCTION).contains("Report at most 15 findings");
+		assertThat(findings()).containsEntry("maxItems", 15);
 	}
 
 	@Test

@@ -29,8 +29,12 @@ final class GeminiPrompt {
 	/**
 	 * Most findings one chunk may return. Together with the lengths the instructions ask for,
 	 * it keeps a complete answer below the output limit.
+	 *
+	 * <p>Not higher than 15: the API rejects a schema that has nullable fields and a larger
+	 * limit ("invalid argument", observed with 20). The fields stay nullable and required,
+	 * because the model leaves an optional field out even when told to fill it.
 	 */
-	static final int MAX_FINDINGS = 20;
+	static final int MAX_FINDINGS = 15;
 
 	static final String SYSTEM_INSTRUCTION = """
 			You are a senior software engineer reviewing source code. You report findings about \
@@ -64,8 +68,9 @@ final class GeminiPrompt {
 			- filePath is the path exactly as written in the file marker.
 			- lineStart and lineEnd are the line numbers shown in front of the lines, inclusive. \
 			Cover only the lines the finding is about: never more than %1$d lines and never the whole file.
-			- An ISSUE always has filePath, lineStart and lineEnd. A GOOD_PRACTICE about the code \
-			as a whole has null for all three.
+			- An ISSUE always has filePath, lineStart and lineEnd. For a single line, lineEnd is \
+			the same number as lineStart. A GOOD_PRACTICE about the code as a whole has null for \
+			all three.
 			- Never report a file or a line that is not in the input.
 
 			text, in English:
