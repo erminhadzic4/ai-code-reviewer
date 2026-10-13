@@ -26,4 +26,7 @@ public interface ReviewRepository extends JpaRepository<Review, UUID> {
 
 	List<Review> findByStatus(ReviewStatus status);
 
+	/** A review only if it belongs to this user; someone else's is as absent as a missing one. */
+	Optional<Review> findByIdAndUserId(UUID id, Long userId);
+
 }
