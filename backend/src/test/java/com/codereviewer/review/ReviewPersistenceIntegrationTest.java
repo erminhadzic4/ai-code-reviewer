@@ -2,6 +2,7 @@ package com.codereviewer.review;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -32,6 +33,8 @@ class ReviewPersistenceIntegrationTest {
 
 	private static final RepoRef REPO = new RepoRef("octocat", "hello-world");
 	private static final String SHA = "89abcdef0123456789abcdef0123456789abcdef";
+	private static final Instant STARTED = Instant.parse("2026-10-13T10:00:00Z");
+	private static final Instant FINISHED = Instant.parse("2026-10-13T10:02:30Z");
 
 	@Autowired
 	private ReviewRepository reviewRepository;
@@ -110,6 +113,8 @@ class ReviewPersistenceIntegrationTest {
 		assertThat(stored.getPerformanceScore()).isEqualTo(85);
 		assertThat(stored.getFilesAnalyzed()).isEqualTo(12);
 		assertThat(stored.getFilesSkipped()).isEqualTo(3);
+		assertThat(stored.getFilesFailed()).isEqualTo(2);
+		assertThat(stored.getLinesAnalyzed()).isEqualTo(1840);
 		assertThat(stored.getFindingsDiscarded()).isEqualTo(1);
 		assertThat(stored.getCreatedAt()).isNotNull();
 	}
@@ -165,42 +170,104 @@ class ReviewPersistenceIntegrationTest {
 	@Test
 	void completedReviewLeadsToItsAnalysisAndTheStateWrittenByTheJob() {
 		Analysis analysis = analysisRepository.saveAndFlush(analysis());
-		UUID id = reviewRepository.saveAndFlush(new Review(savedUserId(), REPO)).getId();
-		// The entity has no way to complete a review yet, so the job's writes are made here.
-		jdbcTemplate.update("""
-				UPDATE reviews
-				SET status = 'COMPLETED', stage = 'SCORING', branch = 'main', commit_sha = ?, analysis_id = ?,
-						chunks_done = 2, chunks_total = 2, attempts = 1, cache_hit = true,
-						started_at = now(), finished_at = now()
-				WHERE id = ?""", SHA, analysis.getId(), id);
+		Review review = reviewRepository.saveAndFlush(new Review(savedUserId(), REPO));
+		review.start(STARTED);
+		review.fetched("main", SHA);
+		review.analyzing(2);
+		review.progress(2, 2);
+		review.scoring();
+		review.complete(analysis, false, FINISHED);
+		reviewRepository.flush();
 		entityManager.clear();
 
-		Review stored = reviewRepository.findById(id).orElseThrow();
+		Review stored = reviewRepository.findById(review.getId()).orElseThrow();
 		assertThat(stored.getStatus()).isEqualTo(ReviewStatus.COMPLETED);
-		assertThat(stored.getStage()).isEqualTo(ReviewStage.SCORING);
+		assertThat(stored.getStage()).isNull();
 		assertThat(stored.getBranch()).isEqualTo("main");
 		assertThat(stored.getCommitSha()).isEqualTo(SHA);
 		assertThat(stored.getChunksDone()).isEqualTo(2);
 		assertThat(stored.getChunksTotal()).isEqualTo(2);
 		assertThat(stored.getAttempts()).isEqualTo(1);
-		assertThat(stored.isCacheHit()).isTrue();
-		assertThat(stored.getStartedAt()).isNotNull();
-		assertThat(stored.getFinishedAt()).isNotNull();
+		assertThat(stored.isCacheHit()).isFalse();
+		assertThat(stored.getStartedAt()).isEqualTo(STARTED);
+		assertThat(stored.getFinishedAt()).isEqualTo(FINISHED);
 		assertThat(stored.getAnalysis().getId()).isEqualTo(analysis.getId());
 		assertThat(stored.getAnalysis().getOverallScore()).isEqualTo(72);
 	}
 
 	@Test
-	void failedReviewIsReadWithItsError() {
-		UUID id = reviewRepository.saveAndFlush(new Review(savedUserId(), REPO)).getId();
-		jdbcTemplate.update("UPDATE reviews SET status = 'FAILED', error_code = ?, error_message = ? WHERE id = ?",
-				"REPO_NOT_FOUND", "Repository not found", id);
+	void everyStageOfARunningReviewIsStored() {
+		Review review = reviewRepository.saveAndFlush(new Review(savedUserId(), REPO));
+
+		review.start(STARTED);
+		assertThat(storedStage(review)).isEqualTo("FETCHING");
+		review.analyzing(3);
+		review.progress(1, 3);
+		assertThat(storedStage(review)).isEqualTo("ANALYZING");
+		review.scoring();
+		assertThat(storedStage(review)).isEqualTo("SCORING");
+	}
+
+	@Test
+	void reviewServedFromTheCacheIsStoredAsACacheHit() {
+		Analysis analysis = analysisRepository.saveAndFlush(analysis());
+		Review review = reviewRepository.saveAndFlush(new Review(savedUserId(), REPO));
+		review.start(STARTED);
+		review.fetched("main", SHA);
+		review.complete(analysis, true, FINISHED);
+		reviewRepository.flush();
 		entityManager.clear();
 
-		Review stored = reviewRepository.findById(id).orElseThrow();
+		Review stored = reviewRepository.findById(review.getId()).orElseThrow();
+		assertThat(stored.getStatus()).isEqualTo(ReviewStatus.COMPLETED);
+		assertThat(stored.isCacheHit()).isTrue();
+		assertThat(stored.getAnalysis().getId()).isEqualTo(analysis.getId());
+	}
+
+	@Test
+	void requeuedReviewWaitsInTheQueueForItsNextAttempt() {
+		Review review = reviewRepository.saveAndFlush(new Review(savedUserId(), REPO));
+		review.start(STARTED);
+		review.analyzing(2);
+		review.requeue(FINISHED);
+		reviewRepository.flush();
+		entityManager.clear();
+
+		Review stored = reviewRepository.findById(review.getId()).orElseThrow();
+		assertThat(stored.getStatus()).isEqualTo(ReviewStatus.QUEUED);
+		assertThat(stored.getStage()).isNull();
+		assertThat(stored.getAttempts()).isEqualTo(1);
+		assertThat(stored.getRunAfter()).isEqualTo(FINISHED);
+		assertThat(stored.getAnalysis()).isNull();
+	}
+
+	@Test
+	void failedReviewIsReadWithItsError() {
+		Review review = reviewRepository.saveAndFlush(new Review(savedUserId(), REPO));
+		review.start(STARTED);
+		review.fail("REPO_NOT_FOUND", "Repository not found", FINISHED);
+		reviewRepository.flush();
+		entityManager.clear();
+
+		Review stored = reviewRepository.findById(review.getId()).orElseThrow();
 		assertThat(stored.getStatus()).isEqualTo(ReviewStatus.FAILED);
+		assertThat(stored.getStage()).isNull();
 		assertThat(stored.getErrorCode()).isEqualTo("REPO_NOT_FOUND");
 		assertThat(stored.getErrorMessage()).isEqualTo("Repository not found");
+		assertThat(stored.getFinishedAt()).isEqualTo(FINISHED);
+		assertThat(stored.getAnalysis()).isNull();
+	}
+
+	@Test
+	void longestErrorMessageFitsItsColumn() {
+		Review review = reviewRepository.saveAndFlush(new Review(savedUserId(), REPO));
+		review.start(STARTED);
+		review.fail("INTERNAL_ERROR", "x".repeat(2000), FINISHED);
+		reviewRepository.flush();
+		entityManager.clear();
+
+		assertThat(reviewRepository.findById(review.getId()).orElseThrow().getErrorMessage())
+				.hasSize(Review.MAX_ERROR_MESSAGE_LENGTH);
 	}
 
 	@Test
@@ -234,12 +301,17 @@ class ReviewPersistenceIntegrationTest {
 				analysis.getId())).isEqualTo(5);
 	}
 
+	private String storedStage(Review review) {
+		reviewRepository.flush();
+		return jdbcTemplate.queryForObject("SELECT stage FROM reviews WHERE id = ?", String.class, review.getId());
+	}
+
 	private long savedUserId() {
 		return userRepository.saveAndFlush(new User("review-" + UUID.randomUUID() + "@example.com", "hash")).getId();
 	}
 
 	private static Analysis analysis() {
-		return new Analysis(REPO, SHA, "FAKE", "fake-1", 1, 72, 0, 100, 85, 12, 3, 1);
+		return new Analysis(REPO, SHA, "FAKE", "fake-1", 1, 72, 0, 100, 85, 12, 3, 2, 1840, 1);
 	}
 
 }

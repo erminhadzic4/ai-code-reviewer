@@ -57,6 +57,12 @@ public final class FakeHttpServer implements AutoCloseable {
 		return this;
 	}
 
+	/** Forgets the programmed answers and the received requests, for a server that tests share. */
+	public void reset() {
+		responses.clear();
+		requests.clear();
+	}
+
 	public List<Request> requests() {
 		return List.copyOf(requests);
 	}

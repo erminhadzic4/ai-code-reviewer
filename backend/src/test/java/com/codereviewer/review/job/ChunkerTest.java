@@ -2,6 +2,7 @@ package com.codereviewer.review.job;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.stream.IntStream;
 
@@ -103,7 +104,8 @@ class ChunkerTest {
 	}
 
 	private static Chunker chunker(int budget) {
-		return new Chunker(new ReviewProperties(ProviderType.FAKE, budget));
+		return new Chunker(new ReviewProperties(ProviderType.FAKE, budget, 3,
+				new ReviewProperties.Worker(true, Duration.ofSeconds(1))));
 	}
 
 	private static List<SourceFile> files(int count) {

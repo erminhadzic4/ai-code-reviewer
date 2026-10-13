@@ -7,3 +7,7 @@ app:
   jwt:
     # Test-only value, never used outside the test suite.
     secret: test-only-jwt-secret-0123456789-abcdefghij
+  review:
+    worker:
+      # No timer in tests: each test runs a job by calling the worker, on its own thread.
+      enabled: false

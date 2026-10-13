@@ -12,9 +12,9 @@ import java.util.zip.ZipOutputStream;
  * with the tree below it. Hostile archives are built the same way, so no binary fixture
  * has to be stored in the repository.
  */
-final class TestZip {
+public final class TestZip {
 
-	static final String ROOT = "octo-demo-0123abc";
+	public static final String ROOT = "octo-demo-0123abc";
 
 	private final ByteArrayOutputStream bytes = new ByteArrayOutputStream();
 	private final ZipOutputStream zip = new ZipOutputStream(bytes);
@@ -23,29 +23,29 @@ final class TestZip {
 	}
 
 	/** An archive that already contains the root directory entry. */
-	static TestZip repository() {
+	public static TestZip repository() {
 		return new TestZip().entry(ROOT + "/", new byte[0]);
 	}
 
 	/** An archive with nothing in it, for entries that must not sit below the root. */
-	static TestZip empty() {
+	public static TestZip empty() {
 		return new TestZip();
 	}
 
-	TestZip file(String path, String content) {
+	public TestZip file(String path, String content) {
 		return file(path, content.getBytes(StandardCharsets.UTF_8));
 	}
 
-	TestZip file(String path, byte[] content) {
+	public TestZip file(String path, byte[] content) {
 		return entry(ROOT + "/" + path, content);
 	}
 
-	TestZip directory(String path) {
+	public TestZip directory(String path) {
 		return entry(ROOT + "/" + path + "/", new byte[0]);
 	}
 
 	/** Adds an entry under exactly this name, without the root prefix. */
-	TestZip entry(String name, byte[] content) {
+	public TestZip entry(String name, byte[] content) {
 		try {
 			zip.putNextEntry(new ZipEntry(name));
 			zip.write(content);
@@ -58,12 +58,12 @@ final class TestZip {
 	}
 
 	/** GitHub writes the commit SHA as the archive comment. */
-	TestZip comment(String comment) {
+	public TestZip comment(String comment) {
 		zip.setComment(comment);
 		return this;
 	}
 
-	byte[] bytes() {
+	public byte[] bytes() {
 		try {
 			zip.close();
 			return bytes.toByteArray();

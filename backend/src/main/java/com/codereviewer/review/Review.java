@@ -27,6 +27,8 @@ import org.hibernate.type.SqlTypes;
 @Table(name = "reviews")
 public class Review {
 
+	static final int MAX_ERROR_MESSAGE_LENGTH = 500;
+
 	// A UUID because the id appears in URLs, where a sequential number could be guessed.
 	@Id
 	@GeneratedValue(strategy = GenerationType.UUID)
@@ -71,7 +73,7 @@ public class Review {
 	@Column(name = "error_code", length = 40)
 	private String errorCode;
 
-	@Column(name = "error_message", length = 500)
+	@Column(name = "error_message", length = MAX_ERROR_MESSAGE_LENGTH)
 	private String errorMessage;
 
 	@ManyToOne(fetch = FetchType.LAZY)
@@ -102,6 +104,103 @@ public class Review {
 		this.status = ReviewStatus.QUEUED;
 		this.createdAt = Instant.now();
 		this.runAfter = this.createdAt;
+	}
+
+	// State transitions. Each one checks the state it starts from, so a job cannot skip a
+	// step or finish a review twice; the caller supplies the time.
+
+	/** A worker takes the review: the next attempt begins, with no progress yet. */
+	public void start(Instant now) {
+		require(status == ReviewStatus.QUEUED, "start");
+		status = ReviewStatus.RUNNING;
+		stage = ReviewStage.FETCHING;
+		attempts++;
+		chunksDone = 0;
+		chunksTotal = 0;
+		startedAt = now;
+	}
+
+	/** The commit that this attempt reviews is known. */
+	public void fetched(String branch, String commitSha) {
+		require(status == ReviewStatus.RUNNING, "record the commit of");
+		this.branch = branch;
+		this.commitSha = commitSha;
+	}
+
+	/** The files are split into chunks and the first one is about to be sent. */
+	public void analyzing(int chunksTotal) {
+		require(status == ReviewStatus.RUNNING, "analyse");
+		setProgress(0, chunksTotal);
+		stage = ReviewStage.ANALYZING;
+	}
+
+	/** The total can grow while the analysis runs, when a chunk has to be split. */
+	public void progress(int chunksDone, int chunksTotal) {
+		require(status == ReviewStatus.RUNNING && stage == ReviewStage.ANALYZING, "report progress of");
+		setProgress(chunksDone, chunksTotal);
+	}
+
+	public void scoring() {
+		require(status == ReviewStatus.RUNNING, "score");
+		stage = ReviewStage.SCORING;
+	}
+
+	/**
+	 * @param analysis the result, stored already
+	 * @param cacheHit whether the analysis existed before this review ran
+	 */
+	public void complete(Analysis analysis, boolean cacheHit, Instant now) {
+		require(status == ReviewStatus.RUNNING, "complete");
+		if (analysis == null) {
+			throw new IllegalArgumentException("A completed review needs its analysis");
+		}
+		status = ReviewStatus.COMPLETED;
+		stage = null;
+		this.analysis = analysis;
+		this.cacheHit = cacheHit;
+		finishedAt = now;
+	}
+
+	/** Back into the queue, for another attempt no earlier than {@code runAfter}. */
+	public void requeue(Instant runAfter) {
+		require(status == ReviewStatus.RUNNING, "requeue");
+		status = ReviewStatus.QUEUED;
+		stage = null;
+		chunksDone = 0;
+		chunksTotal = 0;
+		this.runAfter = runAfter;
+	}
+
+	/**
+	 * @param errorCode name of the error code, stored as it is
+	 * @param errorMessage a message that is safe to show; cut to what the column holds
+	 */
+	public void fail(String errorCode, String errorMessage, Instant now) {
+		require(status == ReviewStatus.RUNNING, "fail");
+		if (errorCode == null || errorCode.isBlank()) {
+			throw new IllegalArgumentException("A failed review needs an error code");
+		}
+		status = ReviewStatus.FAILED;
+		stage = null;
+		this.errorCode = errorCode;
+		this.errorMessage = errorMessage == null || errorMessage.length() <= MAX_ERROR_MESSAGE_LENGTH ? errorMessage
+				: errorMessage.substring(0, MAX_ERROR_MESSAGE_LENGTH);
+		finishedAt = now;
+	}
+
+	private void setProgress(int chunksDone, int chunksTotal) {
+		if (chunksDone < 0 || chunksDone > chunksTotal) {
+			throw new IllegalArgumentException("Progress must be between 0 and the total");
+		}
+		this.chunksDone = chunksDone;
+		this.chunksTotal = chunksTotal;
+	}
+
+	private void require(boolean allowed, String action) {
+		if (!allowed) {
+			String state = stage == null ? status.name() : status + " (" + stage + ")";
+			throw new IllegalStateException("Cannot " + action + " a review that is " + state);
+		}
 	}
 
 	public UUID getId() {

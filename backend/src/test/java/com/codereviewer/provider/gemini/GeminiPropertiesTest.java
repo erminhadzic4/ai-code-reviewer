@@ -39,7 +39,29 @@ class GeminiPropertiesTest {
 			assertThat(properties.readTimeout()).isEqualTo(Duration.ofSeconds(120));
 			assertThat(properties.maxOutputTokens()).isEqualTo(32_768);
 			assertThat(properties.maxResponseSize()).isEqualTo(DataSize.ofMegabytes(2));
+			assertThat(properties.requestsPerMinute()).isEqualTo(12);
+			assertThat(properties.charactersPerMinute()).isEqualTo(600_000);
 		});
+	}
+
+	// The free tier allows 15 requests and 250 000 tokens a minute; a character was measured
+	// at 1 / 2.8 of a token. The shipped pacing has to stay below both.
+	@Test
+	void shippedPacingStaysBelowTheFreeLimitsOfTheModel() {
+		contextRunner.run(context -> {
+			GeminiProperties properties = context.getBean(GeminiProperties.class);
+			assertThat(properties.requestsPerMinute()).isLessThan(15);
+			assertThat(properties.charactersPerMinute() / 2.8).isLessThan(250_000);
+		});
+	}
+
+	@Test
+	void contextFailsToStartWithInvalidPacing() {
+		contextRunner.withPropertyValues("app.gemini.requests-per-minute=0").run(context -> assertThat(context)
+				.hasFailed()
+				.getFailure()
+				.rootCause()
+				.hasMessageContaining("app.gemini.requests-per-minute"));
 	}
 
 	@Test
@@ -166,6 +188,24 @@ class GeminiPropertiesTest {
 		settings.maxResponseSize = null;
 		assertThatThrownBy(settings::build)
 				.hasMessage("app.gemini.max-response-size must be positive and below 1 GB.");
+	}
+
+	@ParameterizedTest
+	@ValueSource(ints = { 0, -1 })
+	void requestsPerMinuteMustBePositive(int requests) {
+		settings.requestsPerMinute = requests;
+
+		assertThatThrownBy(settings::build).isInstanceOf(IllegalStateException.class)
+				.hasMessage("app.gemini.requests-per-minute must be positive.");
+	}
+
+	@ParameterizedTest
+	@ValueSource(ints = { 0, -1 })
+	void charactersPerMinuteMustBePositive(int characters) {
+		settings.charactersPerMinute = characters;
+
+		assertThatThrownBy(settings::build).isInstanceOf(IllegalStateException.class)
+				.hasMessage("app.gemini.characters-per-minute must be positive.");
 	}
 
 	@Configuration(proxyBeanMethods = false)

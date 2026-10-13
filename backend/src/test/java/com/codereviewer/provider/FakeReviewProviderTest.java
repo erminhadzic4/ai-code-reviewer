@@ -111,6 +111,11 @@ class FakeReviewProviderTest {
 		assertThat(provider.promptVersion()).isEqualTo(1);
 	}
 
+	@Test
+	void fakeNeverHasToBeSlowedDown() {
+		assertThat(provider.limits()).isEqualTo(ProviderLimits.UNLIMITED);
+	}
+
 	private static List<RawFinding> issuesOf(List<RawFinding> findings) {
 		return findings.stream().filter(finding -> finding.kind() == FindingKind.ISSUE).toList();
 	}

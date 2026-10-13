@@ -21,6 +21,12 @@ public interface CodeReviewProvider {
 	int promptVersion();
 
 	/**
+	 * How fast requests may be sent. A provider never waits by itself; the job that calls it
+	 * paces the requests. Not a default method on purpose: every provider has to say.
+	 */
+	ProviderLimits limits();
+
+	/**
 	 * Reviews one chunk. The findings are returned as reported; checking them is the
 	 * caller's job.
 	 */

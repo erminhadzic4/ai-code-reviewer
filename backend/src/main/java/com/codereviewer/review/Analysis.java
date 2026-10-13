@@ -65,6 +65,12 @@ public class Analysis {
 	@Column(name = "files_skipped", nullable = false, updatable = false)
 	private int filesSkipped;
 
+	@Column(name = "files_failed", nullable = false, updatable = false)
+	private int filesFailed;
+
+	@Column(name = "lines_analyzed", nullable = false, updatable = false)
+	private int linesAnalyzed;
+
 	@Column(name = "findings_discarded", nullable = false, updatable = false)
 	private int findingsDiscarded;
 
@@ -79,11 +85,14 @@ public class Analysis {
 	 * @param commitSha full 40-character SHA in lower case
 	 * @param provider name of the provider that produced the findings
 	 * @param overallScore each score is between 0 and 100, computed by the backend
+	 * @param filesSkipped files left out before the review, by the file filter
+	 * @param filesFailed files the provider could not review; above zero the analysis is partial
+	 * @param linesAnalyzed lines of the files that were reviewed, which the scores were computed from
 	 * @param findingsDiscarded findings dropped because they failed validation
 	 */
 	public Analysis(RepoRef repo, String commitSha, String provider, String model, int promptVersion,
 			int overallScore, int securityScore, int maintainabilityScore, int performanceScore, int filesAnalyzed,
-			int filesSkipped, int findingsDiscarded) {
+			int filesSkipped, int filesFailed, int linesAnalyzed, int findingsDiscarded) {
 		this.repoOwner = repo.owner();
 		this.repoName = repo.name();
 		this.commitSha = commitSha;
@@ -96,6 +105,8 @@ public class Analysis {
 		this.performanceScore = performanceScore;
 		this.filesAnalyzed = filesAnalyzed;
 		this.filesSkipped = filesSkipped;
+		this.filesFailed = filesFailed;
+		this.linesAnalyzed = linesAnalyzed;
 		this.findingsDiscarded = findingsDiscarded;
 		this.createdAt = Instant.now();
 	}
@@ -150,6 +161,14 @@ public class Analysis {
 
 	public int getFilesSkipped() {
 		return filesSkipped;
+	}
+
+	public int getFilesFailed() {
+		return filesFailed;
+	}
+
+	public int getLinesAnalyzed() {
+		return linesAnalyzed;
 	}
 
 	public int getFindingsDiscarded() {

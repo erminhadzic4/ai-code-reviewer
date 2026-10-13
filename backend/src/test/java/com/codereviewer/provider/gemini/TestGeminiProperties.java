@@ -15,10 +15,12 @@ final class TestGeminiProperties {
 	Duration readTimeout = Duration.ofSeconds(120);
 	int maxOutputTokens = 32_768;
 	DataSize maxResponseSize = DataSize.ofMegabytes(2);
+	int requestsPerMinute = 12;
+	int charactersPerMinute = 600_000;
 
 	GeminiProperties build() {
 		return new GeminiProperties(apiKey, model, apiUrl, connectTimeout, readTimeout, maxOutputTokens,
-				maxResponseSize);
+				maxResponseSize, requestsPerMinute, charactersPerMinute);
 	}
 
 }

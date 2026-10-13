@@ -21,7 +21,7 @@ Scope for now: runs locally. Public deployment is a later option (see "Later").
 - [x] M4 Gemini provider: prompt, JSON schema, validation, line-number verification,
       chunking of large repos
 - [x] M5 Scoring formula: scores computed from the findings by a pure function
-- [ ] M6 Async jobs: submit returns a job id, status polling, error handling, retry,
+- [x] M6 Async jobs: submit returns a job id, status polling, error handling, retry,
       saving analyses and findings, cache by commit SHA
 - [ ] M7 Frontend, following the approved frontend design mockup (dark theme: landing page
       and review report): login/register, submit form, progress screen, report dashboard,
