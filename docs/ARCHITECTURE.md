@@ -24,7 +24,7 @@ com.codereviewer
 │   └── gemini/  GeminiReviewProvider, GeminiPrompt (instructions, schema, version),
 │                GeminiProperties (key, model, timeouts, limits)
 ├── review/      ReviewController, ReviewService, Review, Analysis, Finding,
-│   │            repositories, dto/, ScoreCalculator, FindingLevel, ReviewStatus, ReviewStage
+│   │            repositories, dto/, ScoreCalculator, Scores, FindingLevel, ReviewStatus, ReviewStage
 │   └── job/     ReviewWorker (claims jobs), ReviewPipeline (steps of one review), Chunker
 ├── config/      SecurityConfig, OpenApiConfig, ReviewProperties (limits of the review process,
 │                such as the chunk budget; the GitHub client's limits are in github/GitHubProperties)
@@ -172,10 +172,36 @@ finding and as totals.
 ### Scoring
 
 Scores are computed by `ScoreCalculator`, a pure function with no database or model
-access. For each category: 100 minus the sum of penalties, where a penalty depends on the
-severity of an issue and is normalised by the amount of code analysed, clamped to 0 to 100.
-The overall score is a weighted average of the three categories. Exact weights are fixed
-and tested in M6.
+access. Its input is the findings that passed validation and the number of lines of the
+files that were actually reviewed.
+
+```
+penalty(category) = sum of the points of every ISSUE in that category
+lines             = max(lines analysed, 1000)
+score(category)   = max(0, round(100 - penalty * 1000 / lines))
+overall           = round(0.40 * security + 0.35 * maintainability + 0.25 * performance)
+```
+
+| Severity | `CRITICAL` | `HIGH` | `MEDIUM` | `LOW` |
+|---|---|---|---|---|
+| Points per 1000 lines | 30 | 15 | 6 | 3 |
+
+- The penalty is linear in the density of issues: the same issues weigh half as much in
+  twice as much code.
+- A line is a line of `SourceFile.lines()`, blank lines and comments included.
+- Less than 1000 lines is scored as 1000 lines, so in a small repository one issue costs
+  exactly the points in the table.
+- Rounding is half up. The overall score is computed from the rounded category scores, so
+  it can be checked from the numbers on the screen.
+- The numbers are constants in the code, not configuration.
+
+| Repository | Issues | Security | Maintainability | Performance | Overall |
+|---|---|---|---|---|---|
+| 2000 lines | security: 1 critical, 1 high; maintainability: 3 medium, 4 low; performance: 1 medium | 78 | 85 | 97 | 85 |
+| 300 lines | maintainability: 1 low | 100 | 97 | 100 | 99 |
+| 300 lines | security: 1 critical | 70 | 100 | 100 | 88 |
+| 6000 lines | security: 15 critical | 25 | 100 | 100 | 70 |
+| any | none, or only good practices | 100 | 100 | 100 | 100 |
 
 | Decision | Rejected | Why |
 |---|---|---|
@@ -331,7 +357,7 @@ A deliberate V1 trade-off. There are two levels of retry:
 
 - **Within a job.** A single HTTP call to GitHub or the model that returns 429 or 5xx is
   repeated after a delay, honouring `Retry-After`. Chunks already finished are not repeated.
-  This belongs to the job (M5). `GitHubClient` itself never retries and never waits: it
+  This belongs to the job (M6). `GitHubClient` itself never retries and never waits: it
   reports a failure with a code, a flag that says whether trying again can help, and the
   time GitHub gave for the limit to reset.
 - **The whole job.** If the job still fails, the next attempt starts from scratch: it
