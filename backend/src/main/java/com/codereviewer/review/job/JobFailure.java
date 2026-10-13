@@ -25,6 +25,10 @@ public record JobFailure(String code, String message, boolean retryable, Instant
 		return new JobFailure(ex.getCode().name(), ex.getMessage(), ex.isRetryable(), ex.getRetryAt().orElse(null));
 	}
 
+	public static JobFailure of(ReviewFailedException ex) {
+		return of(ex.getCode(), ex.getMessage());
+	}
+
 	/** A failure of the review itself, which no later attempt can fix. */
 	public static JobFailure of(ReviewErrorCode code, String message) {
 		return new JobFailure(code.name(), message, false, null);
