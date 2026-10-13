@@ -15,6 +15,7 @@ import com.codereviewer.provider.FindingCategory;
 import com.codereviewer.provider.FindingKind;
 import com.codereviewer.provider.ProviderErrorCode;
 import com.codereviewer.provider.ProviderException;
+import com.codereviewer.provider.ProviderLimits;
 import com.codereviewer.provider.RawFinding;
 import com.codereviewer.provider.ReviewChunk;
 import com.codereviewer.provider.Severity;
@@ -109,6 +110,11 @@ public class GeminiReviewProvider implements CodeReviewProvider {
 	@Override
 	public int promptVersion() {
 		return GeminiPrompt.VERSION;
+	}
+
+	@Override
+	public ProviderLimits limits() {
+		return new ProviderLimits(properties.requestsPerMinute(), properties.charactersPerMinute());
 	}
 
 	/**

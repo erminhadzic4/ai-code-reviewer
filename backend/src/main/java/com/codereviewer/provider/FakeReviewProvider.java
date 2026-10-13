@@ -64,6 +64,11 @@ public class FakeReviewProvider implements CodeReviewProvider {
 	}
 
 	@Override
+	public ProviderLimits limits() {
+		return ProviderLimits.UNLIMITED;
+	}
+
+	@Override
 	public List<RawFinding> review(ReviewChunk chunk) {
 		List<RawFinding> findings = new ArrayList<>();
 		List<SourceFile> files = chunk.files();

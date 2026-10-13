@@ -21,6 +21,7 @@ import com.codereviewer.provider.FindingValidator;
 import com.codereviewer.provider.NumberedSource;
 import com.codereviewer.provider.ProviderErrorCode;
 import com.codereviewer.provider.ProviderException;
+import com.codereviewer.provider.ProviderLimits;
 import com.codereviewer.provider.RawFinding;
 import com.codereviewer.provider.ReviewChunk;
 import com.codereviewer.provider.Severity;
@@ -166,6 +167,15 @@ class GeminiReviewProviderTest {
 		assertThat(provider.name()).isEqualTo("GEMINI");
 		assertThat(provider.model()).isEqualTo("gemini-3.8-flash");
 		assertThat(provider.promptVersion()).isEqualTo(GeminiPrompt.VERSION);
+	}
+
+	@Test
+	void limitsComeFromTheSettings() {
+		settings.requestsPerMinute = 7;
+		settings.charactersPerMinute = 123_456;
+
+		assertThat(provider().limits()).isEqualTo(new ProviderLimits(7, 123_456));
+		assertThat(gemini.requests()).isEmpty();
 	}
 
 	// answers recorded from the real API

@@ -20,10 +20,13 @@ import org.springframework.util.unit.DataSize;
  * @param readTimeout time allowed for a whole request, from sending it to reading its answer
  * @param maxOutputTokens most tokens the model may answer with
  * @param maxResponseSize size above which an answer is not read any further
+ * @param requestsPerMinute most requests the job sends in any 60 seconds
+ * @param charactersPerMinute most characters of source the job sends in any 60 seconds
  */
 @ConfigurationProperties("app.gemini")
 public record GeminiProperties(String apiKey, String model, URI apiUrl, Duration connectTimeout,
-		Duration readTimeout, int maxOutputTokens, DataSize maxResponseSize) {
+		Duration readTimeout, int maxOutputTokens, DataSize maxResponseSize, int requestsPerMinute,
+		int charactersPerMinute) {
 
 	public GeminiProperties {
 		apiKey = (apiKey == null || apiKey.isBlank()) ? null : apiKey.strip();
@@ -41,6 +44,12 @@ public record GeminiProperties(String apiKey, String model, URI apiUrl, Duration
 		if (maxResponseSize == null || maxResponseSize.toBytes() <= 0
 				|| maxResponseSize.toBytes() > Integer.MAX_VALUE / 2) {
 			throw new IllegalStateException("app.gemini.max-response-size must be positive and below 1 GB.");
+		}
+		if (requestsPerMinute <= 0) {
+			throw new IllegalStateException("app.gemini.requests-per-minute must be positive.");
+		}
+		if (charactersPerMinute <= 0) {
+			throw new IllegalStateException("app.gemini.characters-per-minute must be positive.");
 		}
 	}
 

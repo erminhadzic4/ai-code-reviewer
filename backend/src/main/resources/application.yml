@@ -46,6 +46,11 @@ app:
     # The longest answer the validator accepts stays below this.
     max-output-tokens: 32768
     max-response-size: 2MB
+    # How fast the job sends requests, kept below the free limits of the model (15 requests
+    # and 250 thousand tokens a minute). 600 thousand characters are three full chunks, about
+    # 214 thousand tokens at 2.8 characters per token.
+    requests-per-minute: 12
+    characters-per-minute: 600000
   review:
     # "fake" returns fixed findings and needs no API key.
     provider: ${REVIEW_PROVIDER:fake}
