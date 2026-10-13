@@ -119,7 +119,8 @@ class RetryPolicyTest {
 
 	@Test
 	void numberOfAttemptsComesFromTheSettings() {
-		RetryPolicy configured = new RetryPolicy(new ReviewProperties(ProviderType.FAKE, 200_000, 2));
+		RetryPolicy configured = new RetryPolicy(new ReviewProperties(ProviderType.FAKE, 200_000, 2,
+				new ReviewProperties.Worker(true, Duration.ofSeconds(1))));
 
 		assertThat(configured.nextAttempt(github(GitHubErrorCode.GITHUB_UNAVAILABLE), 1, NOW)).isPresent();
 		assertThat(configured.nextAttempt(github(GitHubErrorCode.GITHUB_UNAVAILABLE), 2, NOW)).isEmpty();

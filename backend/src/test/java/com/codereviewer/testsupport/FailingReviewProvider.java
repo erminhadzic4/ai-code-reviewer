@@ -2,8 +2,10 @@ package com.codereviewer.testsupport;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import com.codereviewer.provider.CodeReviewProvider;
 import com.codereviewer.provider.ProviderLimits;
@@ -18,6 +20,7 @@ public final class FailingReviewProvider implements CodeReviewProvider {
 
 	private final CodeReviewProvider delegate;
 	private final Map<Integer, RuntimeException> failures = new HashMap<>();
+	private final Set<Integer> interrupting = new HashSet<>();
 	private final List<ReviewChunk> received = new ArrayList<>();
 
 	public FailingReviewProvider(CodeReviewProvider delegate) {
@@ -29,6 +32,15 @@ public final class FailingReviewProvider implements CodeReviewProvider {
 		failures.put(call, failure);
 	}
 
+	/**
+	 * Like {@link #failOnCall}, but the calling thread is interrupted first: what a request
+	 * looks like that was under way when the application shut down.
+	 */
+	public synchronized void interruptOnCall(int call, RuntimeException failure) {
+		failures.put(call, failure);
+		interrupting.add(call);
+	}
+
 	/** Every chunk since the last reset, failed calls included. */
 	public synchronized List<ReviewChunk> received() {
 		return List.copyOf(received);
@@ -36,6 +48,7 @@ public final class FailingReviewProvider implements CodeReviewProvider {
 
 	public synchronized void reset() {
 		failures.clear();
+		interrupting.clear();
 		received.clear();
 	}
 
@@ -64,6 +77,9 @@ public final class FailingReviewProvider implements CodeReviewProvider {
 		received.add(chunk);
 		RuntimeException failure = failures.get(received.size());
 		if (failure != null) {
+			if (interrupting.contains(received.size())) {
+				Thread.currentThread().interrupt();
+			}
 			throw failure;
 		}
 		return delegate.review(chunk);

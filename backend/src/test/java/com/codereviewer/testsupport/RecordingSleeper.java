@@ -20,9 +20,13 @@ public final class RecordingSleeper implements Sleeper {
 		this.clock = clock;
 	}
 
-	// Like Thread.sleep, a duration that is not positive is no wait at all.
+	// Like Thread.sleep: an interrupted thread does not wait, and a duration that is not
+	// positive is no wait at all.
 	@Override
-	public synchronized void sleep(Duration duration) {
+	public synchronized void sleep(Duration duration) throws InterruptedException {
+		if (Thread.interrupted()) {
+			throw new InterruptedException();
+		}
 		if (duration.isZero() || duration.isNegative()) {
 			return;
 		}

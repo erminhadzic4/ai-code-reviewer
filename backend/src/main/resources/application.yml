@@ -61,6 +61,11 @@ app:
     # A review that fails for a reason that can pass (a rate limit, a server error) is tried
     # again later. Every attempt repeats the whole review and spends the model's quota again.
     max-attempts: 3
+    worker:
+      # Runs the queued reviews in the background, one at a time.
+      enabled: true
+      # Pause between two looks at the queue, and between two reviews.
+      poll-interval: 1s
 
 management:
   endpoints:
