@@ -337,3 +337,50 @@ Full reasoning and rejected alternatives are in `ARCHITECTURE.md`. The main deci
   second copy of each.
 - **Tests never call Gemini.** Two live tests run only with `GEMINI_LIVE_TEST=true` and a
   key, never in CI; each costs one request.
+
+## 2026-10-13: M5 scoring formula
+- **Scoring moved before the asynchronous jobs; the milestones were renumbered.** M5 is now
+  the scoring formula and M6 the jobs. Earlier entries that say "M5" for the job and "M6" for
+  scoring and saving refer to the old order. Three things tie the job to the scores: a review
+  is `COMPLETED` only with an analysis, and an analysis needs its four scores (NOT NULL);
+  saving the analysis and its findings is the last step of a job; and the unique cache key
+  makes a second review of the same commit fail unless the job first looks for an existing
+  analysis. So M6 also takes saving and the cache lookup.
+  Rejected: nullable scores until the formula exists (a later migration could not compute the
+  missing scores in SQL and would have to delete those analyses); a provisional formula in the
+  job milestone (throwaway code, and its scores would stay in the cache).
+- **The penalty is linear in issues per 1000 lines.** The same issues weigh half as much in
+  twice as much code. Rejected: no normalisation (a large repository would always score 0);
+  per file (a file of 10 lines and one of 2000 are not the same amount of code); a
+  logarithmic or square-root curve (harder to explain in a report, for a benefit that shows
+  only beyond the size limits of M2).
+- **A line is a line of `SourceFile.lines()`,** blank lines and comments included. Only files
+  that were actually reviewed count. Rejected: lines of code only, which needs a parser per
+  language.
+- **Less than 1000 lines is scored as 1000.** Without the minimum, one low issue in a
+  forty-line script would leave a score of 25. Rejected: no minimum; a minimum of 100 lines,
+  still too harsh for small repositories.
+- **Points per 1000 lines: critical 30, high 15, medium 6, low 3.** Rejected: equal points
+  (a style remark would cost as much as a vulnerability); 100, 10, 1 (one critical issue would
+  decide the score alone and the other issues would not matter).
+- **Overall score: security 40 %, maintainability 35 %, performance 25 %.** Security weighs
+  most because its mistakes cost most; performance least because it is the hardest to judge
+  from reading code alone. Rejected: equal weights; the lowest of the three scores, which
+  would hide the other two.
+- **The overall score is computed from the rounded category scores,** rounding half up, so
+  it can be checked from the numbers shown. Rejected: from the exact values, where the shown
+  and the computed score can differ by one.
+- **The numbers are constants in the code,** like the rules of `FileFilter`: changing one
+  changes results, so it goes through a commit and a test. Rejected: configuration.
+- **`ScoreCalculator` is a final class with a static method,** like `FindingLevel` and
+  `RepoUrlParser`. It has no state and no dependencies. An issue without a severity throws:
+  validation does not let one through, so it would be a mistake in the code.
+- **Known: one severe issue lowers the overall score only moderately.** A small repository
+  with one critical security issue scores 70 for security and 88 overall, because the overall
+  score is an average. The report shows critical issues in a counter of their own.
+  Rejected for now: a cap on the overall score when a critical issue exists, one more rule to
+  explain.
+- **Known: a large repository cannot score very low.** A chunk reports at most 15 findings
+  (M4), so the worst case of a full chunk of about 6000 lines is 25 in one category.
+- **Known: changing the formula does not change analyses already stored.** The scores are
+  saved with an analysis and the cache key has no version of the formula.
