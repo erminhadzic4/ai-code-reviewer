@@ -38,6 +38,33 @@ class ReviewSchemaIntegrationTest {
 	}
 
 	@Test
+	void analysisHasNoFailedFilesUnlessItSaysSo() {
+		long id = insert(new AnalysisRow());
+
+		assertThat(jdbcTemplate.queryForObject("SELECT files_failed FROM analyses WHERE id = ?", Integer.class, id))
+				.isZero();
+	}
+
+	@Test
+	void analysisKeepsTheNumberOfLinesItsScoresWereComputedFrom() {
+		AnalysisRow row = new AnalysisRow();
+		row.linesAnalyzed = 0;
+
+		long id = insert(row);
+
+		assertThat(jdbcTemplate.queryForObject("SELECT lines_analyzed FROM analyses WHERE id = ?", Integer.class, id))
+				.isZero();
+	}
+
+	@Test
+	void databaseRejectsANegativeNumberOfFailedFiles() {
+		long id = insert(new AnalysisRow());
+
+		assertRejected(() -> jdbcTemplate.update("UPDATE analyses SET files_failed = -1 WHERE id = ?", id),
+				"ck_analyses_files_failed");
+	}
+
+	@Test
 	void databaseRejectsASecondAnalysisForTheSameCacheKey() {
 		insert(new AnalysisRow());
 
@@ -86,7 +113,12 @@ class ReviewSchemaIntegrationTest {
 				Arguments.of("a short commit SHA", change((AnalysisRow row) -> row.sha = "0123abc"),
 						"ck_analyses_commit_sha"),
 				Arguments.of("a negative file count", change((AnalysisRow row) -> row.filesSkipped = -1),
-						"ck_analyses_counts"));
+						"ck_analyses_counts"),
+				Arguments.of("a negative number of lines", change((AnalysisRow row) -> row.linesAnalyzed = -1),
+						"ck_analyses_lines_analyzed"),
+				// The column has no default: a row that does not say how much code it covers fails.
+				Arguments.of("no number of lines", change((AnalysisRow row) -> row.linesAnalyzed = null),
+						"null value in column \"lines_analyzed\""));
 	}
 
 	// findings
@@ -306,10 +338,10 @@ class ReviewSchemaIntegrationTest {
 		return jdbcTemplate.queryForObject("""
 				INSERT INTO analyses (repo_owner, repo_name, commit_sha, provider, model, prompt_version,
 						overall_score, security_score, maintainability_score, performance_score,
-						files_analyzed, files_skipped, findings_discarded)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, 80, 80, 10, ?, 0)
+						files_analyzed, files_skipped, lines_analyzed, findings_discarded)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, 80, 80, 10, ?, ?, 0)
 				RETURNING id""", Long.class, row.owner, row.name, row.sha, row.provider, row.model,
-				row.promptVersion, row.overallScore, row.securityScore, row.filesSkipped);
+				row.promptVersion, row.overallScore, row.securityScore, row.filesSkipped, row.linesAnalyzed);
 	}
 
 	private void insert(FindingRow row) {
@@ -353,6 +385,7 @@ class ReviewSchemaIntegrationTest {
 		int overallScore = 80;
 		int securityScore = 80;
 		int filesSkipped = 2;
+		Integer linesAnalyzed = 1200;
 
 	}
 

@@ -110,6 +110,8 @@ class ReviewPersistenceIntegrationTest {
 		assertThat(stored.getPerformanceScore()).isEqualTo(85);
 		assertThat(stored.getFilesAnalyzed()).isEqualTo(12);
 		assertThat(stored.getFilesSkipped()).isEqualTo(3);
+		assertThat(stored.getFilesFailed()).isEqualTo(2);
+		assertThat(stored.getLinesAnalyzed()).isEqualTo(1840);
 		assertThat(stored.getFindingsDiscarded()).isEqualTo(1);
 		assertThat(stored.getCreatedAt()).isNotNull();
 	}
@@ -239,7 +241,7 @@ class ReviewPersistenceIntegrationTest {
 	}
 
 	private static Analysis analysis() {
-		return new Analysis(REPO, SHA, "FAKE", "fake-1", 1, 72, 0, 100, 85, 12, 3, 1);
+		return new Analysis(REPO, SHA, "FAKE", "fake-1", 1, 72, 0, 100, 85, 12, 3, 2, 1840, 1);
 	}
 
 }
