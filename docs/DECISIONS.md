@@ -384,3 +384,129 @@ Full reasoning and rejected alternatives are in `ARCHITECTURE.md`. The main deci
   (M4), so the worst case of a full chunk of about 6000 lines is 25 in one category.
 - **Known: changing the formula does not change analyses already stored.** The scores are
   saved with an analysis and the cache key has no version of the formula.
+
+## 2026-10-13: M6 asynchronous jobs
+- **The worker is a scheduled method on one thread, and one review runs at a time.** A round
+  takes the oldest queued review that is due (`FOR UPDATE SKIP LOCKED`), runs the whole review
+  on the scheduler's thread, and the next round starts only when it has returned. The earlier
+  wording "one job at a time (configurable)" is dropped: nothing is configurable. Rejected: an
+  executor with several threads, because the model's limit is per key, so parallel reviews
+  would only share the same three chunks a minute. `SKIP LOCKED` stays, so a second worker
+  later needs no change to the query.
+- **The claim is a native query.** Rejected: JPQL with a pessimistic lock and a timeout hint
+  that Hibernate turns into `SKIP LOCKED`; the native query shows what the database does.
+- **Recovery after a stop.** The first round of the worker puts every review that is still
+  `RUNNING` back into the queue, due at once; a review that has used all its attempts fails
+  with `REVIEW_INTERRUPTED` instead, so a review that brings the application down cannot do so
+  forever. Recovery runs on the same thread as the reviews, so it cannot touch one that is
+  running. Assumes a single instance. Rejected: a lease column with an expiry, needed only
+  for several instances.
+- **A round that ends with an unhandled exception is followed by another recovery.** If, for
+  example, the database cannot be reached when the end of a review is to be written, that
+  review stays `RUNNING` although nobody runs it. The next round therefore recovers again.
+  This is safe because everything happens on one thread: when a round begins, the worker is
+  not in the middle of any review, so a review marked as running is a leftover.
+  Rejected: recovering only on startup, which would leave such a review stuck until a restart.
+- **A shutdown is not a failure of the review.** When the thread is interrupted, nothing is
+  written: the review stays `RUNNING` and is recovered on the next start. A request that was
+  cut off by the shutdown looks like a network error; it is not counted against the review.
+- **A mistake in the application fails the review at once** with `INTERNAL_ERROR` and a
+  generic message; the details go to the log only. It is not retried, because the same
+  review would hit the same mistake.
+- **Everything a job writes goes through one class, `ReviewJobStore`,** one short transaction
+  per method, so no transaction is open during a request to GitHub or to the model. The
+  methods are in a class of their own because a transaction starts only when a method is
+  called through the proxy around the bean; called from inside the class that runs the job
+  they would run without one. Rejected: a transaction template with lambdas inside the
+  pipeline (steps and database code would mix); a bean that injects itself.
+- **State transitions are methods on `Review`** that check the state they start from and
+  throw otherwise. Rejected: setters with the checks in a service, which could be bypassed; a
+  `RETRYING` status (a queued review with a later `run_after` says the same without a
+  migration); a `CANCELLED` status (nothing can be cancelled in V1).
+- **Requests to the model are paced by the job, in `RequestPacer`.** A sliding window of 60
+  seconds over two budgets, requests and characters; a request waits only as long as it
+  takes for both to fit, so a review of up to three chunks never waits. A chunk larger than
+  the whole budget goes out when the window is empty. Rejected: waiting inside the provider
+  (it never waits, M4); a fixed pause between requests, which slows small repositories for
+  nothing; a counter in the database, needed only for several instances. The window is kept
+  in memory: after a restart the limit can be crossed for a moment, and the rate limit that
+  follows is retried.
+- **Pacing for Gemini: 12 requests and 600 000 characters a minute**
+  (`app.gemini.requests-per-minute`, `characters-per-minute`). The free limits are 15
+  requests and 250 000 tokens; 600 000 characters are three full chunks, about 214 000 tokens
+  at the measured 2.8 characters per token. A test fails if the shipped values reach the
+  free limits.
+- **The limits come from the provider:** `limits()` on `CodeReviewProvider`, not a default
+  method, so every provider has to state its own. The fake has none. Rejected: one setting
+  for all providers, which would slow the fake and, later, a local model.
+- **The daily quota fails the review at once** (`PROVIDER_QUOTA_EXHAUSTED`) and nothing of
+  it is stored: the quota is not a property of the code, so an incomplete analysis must not
+  stay in the cache for that commit. The quota is not counted locally; the key may be used
+  elsewhere and a counter would not survive a restart. Rejected: postponing the review until
+  the quota returns, which would leave the progress screen waiting for hours.
+- **Two levels of retry.** Inside a job only a request to the model is repeated: the same
+  chunk is sent again after a rate limit, a server error or an answer that is not the agreed
+  JSON, at most three sendings, after 5 and then 20 seconds or the time the provider gave. A
+  wait longer than 60 seconds is handed to the job. The whole job is retried at most three
+  times (`app.review.max-attempts`), 1 and then 5 minutes later, or at the time the service
+  gave, bounded to one hour because that time comes from a response header. The pauses are
+  constants in the code. Rejected: pauses in the configuration; nobody would tune them, and
+  every setting needs validation and a test.
+- **A retry of the job repeats the chunks that were already reviewed.** Nothing of a failed
+  attempt is kept, so each attempt spends the model's quota again from the first chunk; this
+  is why a failing request is first repeated inside the job.
+- **GitHub failures are retried at the level of the job only.** This replaces the earlier
+  statement that a single GitHub request is repeated inside a job. GitHub is asked before the
+  first chunk, so starting over costs no quota of the model, and its hourly limit can take up
+  to an hour to reset: the review is postponed through `run_after` and the worker is free for
+  other reviews. Rejected: waiting inside the job, which would block the queue.
+- **A chunk the model cannot review because of its content is split once.** When the answer
+  is cut off or the content is refused, sending the same chunk again gives the same result. A
+  chunk with several files is sent again as two halves; a half is not split further.
+  Rejected: splitting down to single files, which could cost many requests of the daily quota
+  for a rare case.
+- **A chunk is split by the number of its files, not by their size.** The halves keep the
+  order of the files, and with an odd number the first half is the larger one.
+- **A partial analysis completes the review.** Files that still cannot be reviewed are
+  counted in `files_failed`, their paths are logged, and the review is `COMPLETED` if at least
+  one chunk was reviewed; if none was, it fails with the last error. M2 rejected a score for
+  part of a repository; this differs because there an arbitrary first part would have been
+  reviewed silently, while here a few files are missing and the report says how many.
+  Rejected: failing the whole review, which would make a repository with one file the model
+  refuses impossible to review.
+- **`files_failed` and `lines_analyzed` are columns of `analyses`, not of `reviews`** (`V3`).
+  Both describe the result, which every review of the commit shares, and a review served from
+  the cache never reads the files, so it could not compute either. `lines_analyzed` is the
+  second input of the score formula; stored next to the scores, every score can be checked
+  from what the database holds. `files_failed` defaults to 0, a true value for the usual
+  case; `lines_analyzed` has no default, because no value is true by default and a made-up 0
+  would look like data. Rejected: counting failed files as skipped, which means "left out by
+  the file filter before the review".
+- **A repository with nothing to review fails** with `NO_REVIEWABLE_FILES`, without a
+  request to the model and without an analysis. Rejected: an empty analysis, which would give
+  a repository of documents a score of 100 and cache it; `REPO_EMPTY`, which means "no
+  commits".
+- **One good practice per title.** Before scoring and storing, the first good practice of
+  every title is kept (compared without case and surrounding space); a model sees one chunk
+  at a time and praises each for the same thing. Rejected: storing all and counting once when
+  the report is read, which would leave rows that are never shown.
+- **The cache is looked up in the job, right after the commit is known,** under the name
+  GitHub currently uses for the repository, so a renamed repository leads to the same
+  analysis. A partial analysis is cached like any other. Rejected: a lookup when the review
+  is submitted; the commit is not known then, and submitting does not ask GitHub.
+- **The API.** `POST /api/reviews` answers 202 with a `Location` and the status of the new
+  review. Another user's review is answered exactly like a missing one, 404. The report of a
+  review that is not completed is 409. `retryAt` in the status is set only while a review
+  waits in the queue for a time that is still ahead; a new review and one put back by
+  recovery have none. The history endpoint (`GET /api/reviews`) arrives with the screen that
+  uses it (M7).
+- **A token whose user no longer exists gets 401 when it submits a review,** the same answer
+  as for a missing token. A token outlives its user until it expires (M1), and without this
+  the foreign key on `reviews.user_id` would turn the request into a 500.
+- **Tests never wait for time to pass.** Everything that waits uses a `Clock` and a `Sleeper`;
+  in tests the sleeper moves the clock forward instead of sleeping. The worker's timer is
+  switched off (`app.review.worker.enabled`) and a test runs a round by calling the worker,
+  so every change of status happens on the test's thread. GitHub is the fake HTTP server and
+  the provider is the fake one behind a wrapper that can be told to fail. Only the tests of
+  the timer itself and of the real sleeper let real time pass, bounded and for a few
+  milliseconds.

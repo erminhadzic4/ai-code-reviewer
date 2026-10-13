@@ -17,17 +17,23 @@ com.codereviewer
 ├── user/        User (entity), UserRepository
 ├── github/      GitHubClient, RepoUrlParser, ArchiveReader, FileFilter, RepoSnapshot, SourceFile,
 │                GitHubProperties (limits and timeouts), GitHubException
-├── provider/    CodeReviewProvider (interface), ReviewChunk, RawFinding, FakeReviewProvider,
-│   │            FindingValidator (gives VerifiedFinding and ValidationResult), NumberedSource,
-│   │            ProviderException, ProviderErrorCode, FindingKind, FindingCategory, Severity,
-│   │            ProviderType
+├── provider/    CodeReviewProvider (interface), ProviderLimits, ReviewChunk, RawFinding,
+│   │            FakeReviewProvider, FindingValidator (gives VerifiedFinding and ValidationResult),
+│   │            NumberedSource, ProviderException, ProviderErrorCode, FindingKind,
+│   │            FindingCategory, Severity, ProviderType
 │   └── gemini/  GeminiReviewProvider, GeminiPrompt (instructions, schema, version),
-│                GeminiProperties (key, model, timeouts, limits)
-├── review/      ReviewController, ReviewService, Review, Analysis, Finding,
-│   │            repositories, dto/, ScoreCalculator, Scores, FindingLevel, ReviewStatus, ReviewStage
-│   └── job/     ReviewWorker (claims jobs), ReviewPipeline (steps of one review), Chunker
-├── config/      SecurityConfig, OpenApiConfig, ReviewProperties (limits of the review process,
-│                such as the chunk budget; the GitHub client's limits are in github/GitHubProperties)
+│                GeminiProperties (key, model, timeouts, limits, pacing)
+├── review/      ReviewController, ReviewService, Review (with its state transitions), Analysis,
+│   │            Finding, repositories, dto/, ScoreCalculator, Scores, FindingLevel, ReviewStatus,
+│   │            ReviewStage
+│   └── job/     ReviewWorkerSchedule (the timer), ReviewWorker (runs one review at a time and
+│                decides what a failure means), ReviewPipeline (steps of one review),
+│                ReviewJobStore (every write of a job, each in its own transaction), Chunker,
+│                ChunkAnalyzer (sends chunks, repeats and splits them; gives ChunkAnalysis),
+│                RequestPacer, RetryPolicy, JobFailure, ReviewErrorCode, Sleeper
+├── config/      SecurityConfig, OpenApiConfig, ClockConfig, ReviewProperties (settings of the
+│                review process: chunk budget, attempts, worker; the GitHub client's limits are
+│                in github/GitHubProperties)
 └── common/      GlobalExceptionHandler, error types, Origins (check of configured addresses)
 ```
 
@@ -114,11 +120,19 @@ user or an analysis that a review points to cannot be deleted.
 | prompt_version | INT | incremented when the prompt changes |
 | overall_score, security_score, maintainability_score, performance_score | SMALLINT, 0 to 100 | computed by the backend |
 | files_analyzed, files_skipped, findings_discarded | INT | shown in the report |
+| files_failed | INT, default 0 | files the model could not review; above 0 the analysis is partial |
+| lines_analyzed | INT | lines of the reviewed files; the second input of the score formula |
 | created_at | TIMESTAMPTZ | |
 
 `UNIQUE (repo_owner, repo_name, commit_sha, provider, model, prompt_version)` is the cache
 key. Provider, model and prompt version are part of it so that changing the prompt or the
 model does not serve a stale analysis.
+
+`files_failed` and `lines_analyzed` are on the analysis and not on the review because they
+describe the result, which every review of the commit shares: a review served from the cache
+never reads the files and could not compute them. `files_skipped` counts files the file
+filter left out before the review; `files_failed` counts files that were sent and could not
+be reviewed.
 
 ### findings
 
@@ -173,7 +187,8 @@ finding and as totals.
 
 Scores are computed by `ScoreCalculator`, a pure function with no database or model
 access. Its input is the findings that passed validation and the number of lines of the
-files that were actually reviewed.
+files that were actually reviewed. That number is stored with the scores as
+`lines_analyzed`, so a score can be checked from the findings and the analysis alone.
 
 ```
 penalty(category) = sum of the points of every ISSUE in that category
@@ -239,13 +254,39 @@ least 32 bytes.
 
 | Method and path | Purpose | Success | Errors |
 |---|---|---|---|
-| `POST /api/reviews` `{repoUrl}` | submit | 202 with `Location`, `{id, status}` | 400 invalid URL, 401 |
-| `GET /api/reviews/{id}` | status (polled) | 200 `{id, repo, branch, commitSha, status, stage, chunksDone, chunksTotal, error}` | 404 |
-| `GET /api/reviews/{id}/result` | report | 200 `{scores, counts, stats, findings[], goodPractices[]}` | 404, 409 if not `COMPLETED` |
-| `GET /api/reviews?page=&size=` | the user's history | 200 page | 401 |
+| `POST /api/reviews` `{repoUrl}` | submit | 202 with `Location: /api/reviews/{id}` and the status of the new review | 400 invalid URL or empty field, 401 |
+| `GET /api/reviews/{id}` | status (polled) | 200 status | 400 if the id is not a UUID, 401, 404 |
+| `GET /api/reviews/{id}/result` | report | 200 `{scores, counts, stats, findings[], goodPractices[]}` | 400, 401, 404, 409 if not `COMPLETED` |
+| `GET /api/reviews?page=&size=` | the user's history (arrives with the frontend, M7) | 200 page | 401 |
 
-`counts` is `{critical, warnings, codeSmells, goodPractices}`. Each element of `findings[]`
-carries `level`, `category`, `severity`, location, texts and the data for the diff view.
+The status:
+
+```json
+{ "id": "…", "repo": "owner/name", "branch": "main", "commitSha": "…",
+  "status": "RUNNING", "stage": "ANALYZING", "chunksDone": 2, "chunksTotal": 5,
+  "attempt": 1, "maxAttempts": 3, "retryAt": null, "cacheHit": false,
+  "createdAt": "…", "startedAt": "…", "finishedAt": null,
+  "error": null }
+```
+
+- `repo` is the name as it was submitted; `branch` and `commitSha` are null until the job
+  has asked GitHub.
+- `stage` is set only while the review is `RUNNING`. `chunksTotal` grows by one when a chunk
+  has to be split.
+- `attempt` counts the starts of the review. `retryAt` is set only while the review is
+  `QUEUED` and waits for a time that is still ahead, after a failure that can pass. A new
+  review, and one put back into the queue after a restart, have none.
+- `error` is `{code, message}` when the review is `FAILED`, otherwise null. The code is one of
+  `GitHubErrorCode`, `ProviderErrorCode` or `ReviewErrorCode`.
+
+In the report, `counts` is `{critical, warnings, codeSmells, goodPractices}` and `stats` is
+`{filesAnalyzed, filesSkipped, filesFailed, linesAnalyzed, findingsDiscarded}`; a report with
+`filesFailed` above 0 is partial. Each element of `findings[]` and `goodPractices[]` carries
+`id`, `level`, `category`, `severity`, location, texts and the data for the diff view, in the
+order the findings were stored. Sorting and filtering are the frontend's.
+
+A review of another user is answered exactly like one that does not exist. A token whose
+user no longer exists gets 401 when it submits a review.
 
 **No focus selector in V1.** `POST /api/reviews` takes only `repoUrl`. Every analysis covers
 all three categories, and the frontend filters the display over findings it has already
@@ -294,12 +335,17 @@ Browser            Backend (HTTP)        Database      Worker             GitHub
    trailing slash. Anything else is rejected, including links to a branch or a file. The
    backend never requests a user-supplied URL; it extracts `owner` and `repo` and builds
    GitHub API addresses itself. A `QUEUED` row is inserted and 202 is returned.
-2. **Claim.** `ReviewWorker` polls about once a second for the oldest `QUEUED` row whose
-   `run_after` has passed (`SELECT ... FOR UPDATE SKIP LOCKED`) and marks it `RUNNING`.
+2. **Claim.** `ReviewWorker` is called about once a second (`app.review.worker.poll-interval`)
+   by a scheduler with a single thread. It takes the oldest `QUEUED` row whose `run_after`
+   has passed (`SELECT ... FOR UPDATE SKIP LOCKED`), marks it `RUNNING`, counts the attempt
+   and runs the whole review on that thread; the next round starts only when it has returned,
+   so one review runs at a time. A review submitted meanwhile waits in the queue.
 3. **Commit and cache.** `GitHubClient.resolveHead` makes two API requests: one for the
    default branch and the reported repository size, one for the SHA of the latest commit.
    The reported size is only a coarse guard (see the limits below). If an analysis exists
-   for that cache key, the review is linked to it and completed with `cache_hit = true`.
+   for that cache key, the review is linked to it and completed with `cache_hit = true`. The
+   key uses the name GitHub reports for the repository, so a renamed repository leads to the
+   same analysis under both names.
 4. **Fetch.** `GitHubClient.fetchSnapshot` makes a third API request, which redirects to
    the archive host. The repository at that SHA is downloaded as one zip archive and read
    as a stream by `ArchiveReader`; nothing is written to disk. `FileFilter` drops dependency
@@ -317,6 +363,9 @@ Browser            Backend (HTTP)        Database      Worker             GitHub
    | `max-files` kept for review | 500 | review fails, `REPO_TOO_LARGE` |
    | `max-source-size` of the files kept | 2 MB | review fails, `REPO_TOO_LARGE` |
 
+   If no file is left to review, the review fails with `NO_REVIEWABLE_FILES`; the model is
+   not asked and no analysis is stored.
+
 5. **Analyse.** `Chunker` groups files into chunks by a character budget
    (`app.review.chunk-budget`, 200 000). Files keep their order and are never split; a file
    that alone costs more than the budget is a chunk of its own. A chunk holds whole, unchanged
@@ -324,6 +373,13 @@ Browser            Backend (HTTP)        Database      Worker             GitHub
    reported. The text a model sees is made by `NumberedSource`: every line is prefixed with
    its number so the model can cite lines precisely, and the cost of a file in a chunk is the
    length of that text.
+
+   `ChunkAnalyzer` sends the chunks one after another. Before every request `RequestPacer`
+   waits until the request fits the limits the provider states (`limits()`): a sliding window
+   of 60 seconds over the number of requests and the number of characters. A chunk whose
+   answer was cut off or whose content the model refused is sent once more as two halves,
+   split by the number of files; files that still cannot be reviewed are counted as failed
+   and the analysis goes on without them. After every chunk the progress is stored.
 6. **Validate.** `FindingValidator` checks every reported finding: required fields, allowed
    values, lengths that fit the columns, the shape of its kind, and its location. The file
    must be a file of the chunk, under exactly the path that was sent, and
@@ -336,18 +392,36 @@ Browser            Backend (HTTP)        Database      Worker             GitHub
    A line is defined once, in `SourceFile.lines()`: it ends at `\n`, `\r\n` or `\r`, and a
    break at the very end of a file does not start another line. The numbers shown to a
    model, the check of a reported line and the snippet all use it.
-7. **Score and store.** `ScoreCalculator` computes the scores; the analysis and its findings
-   are saved in one transaction; the review becomes `COMPLETED`.
+7. **Score and store.** Of several good practices with the same title only the first is
+   kept: a model sees one chunk at a time and praises each for the same thing.
+   `ScoreCalculator` computes the scores from the findings and the lines of the files that
+   were reviewed; the analysis and its findings are saved in one transaction; the review
+   becomes `COMPLETED`. If some files could not be reviewed, the analysis says how many
+   (`files_failed`) and is stored and cached like any other. If no chunk at all could be
+   reviewed, the review fails.
 8. **Failure.** A transient error (a rate limit, 5xx, a timeout or a dropped connection)
-   increments `attempts`, sets a later `run_after` and returns the row to `QUEUED`, at most
-   three attempts. A permanent error (repository missing, private, blocked, empty or too
-   large; an archive that cannot be trusted; a rejected access token) sets `FAILED` with an
-   `error_code` at once. For GitHub the codes are those of `GitHubErrorCode`, and each says
-   whether it is transient: `RATE_LIMITED` and `GITHUB_UNAVAILABLE` are, while
-   `REPO_NOT_FOUND`, `REPO_UNAVAILABLE`, `REPO_EMPTY`, `REPO_TOO_LARGE`, `ARCHIVE_INVALID`
-   and `GITHUB_AUTH_FAILED` are not. For a provider the codes are those of
-   `ProviderErrorCode` (see "Gemini provider" below).
-   On startup, rows left in `RUNNING` are returned to `QUEUED`.
+   returns the row to `QUEUED` with a later `run_after`: one minute after the first attempt,
+   five after the second, or the time the service gave, at most an hour ahead. After three
+   attempts (`app.review.max-attempts`) the review is `FAILED` with the last error. A
+   permanent error (repository missing, private, blocked, empty or too large; an archive that
+   cannot be trusted; a rejected access token; the model's daily quota; nothing to review)
+   sets `FAILED` with an `error_code` at once. For GitHub the codes are those of
+   `GitHubErrorCode`, and each says whether it is transient: `RATE_LIMITED` and
+   `GITHUB_UNAVAILABLE` are, while `REPO_NOT_FOUND`, `REPO_UNAVAILABLE`, `REPO_EMPTY`,
+   `REPO_TOO_LARGE`, `ARCHIVE_INVALID` and `GITHUB_AUTH_FAILED` are not. For a provider the
+   codes are those of `ProviderErrorCode` (see "Gemini provider" below). The review itself
+   adds `NO_REVIEWABLE_FILES`, `REVIEW_INTERRUPTED` and `INTERNAL_ERROR` (`ReviewErrorCode`),
+   none of them transient. A mistake in the application is `INTERNAL_ERROR` with a generic
+   message; its details go to the log only.
+
+   **Stops and restarts.** When the application shuts down while a review runs, nothing is
+   written: the row stays `RUNNING`. The first round of the worker after a start returns such
+   rows to `QUEUED`, due at once; a row that has used all its attempts becomes `FAILED` with
+   `REVIEW_INTERRUPTED`. The same recovery runs in the round after one that ended with an
+   unhandled exception, for example when the database could not be reached while the end of
+   a review was being written. Everything runs on one thread, so when a round begins no
+   review is really running and a row marked `RUNNING` is a leftover. This assumes a single
+   instance of the application.
 9. **Frontend.** Polls the status every 2 s; on `COMPLETED` it fetches the report, on
    `FAILED` it shows the error.
 
@@ -355,19 +429,26 @@ Browser            Backend (HTTP)        Database      Worker             GitHub
 
 A deliberate V1 trade-off. There are two levels of retry:
 
-- **Within a job.** A single HTTP call to GitHub or the model that returns 429 or 5xx is
-  repeated after a delay, honouring `Retry-After`. Chunks already finished are not repeated.
-  This belongs to the job (M6). `GitHubClient` itself never retries and never waits: it
-  reports a failure with a code, a flag that says whether trying again can help, and the
-  time GitHub gave for the limit to reset.
+- **Within a job.** Only a request to the model is repeated: after a rate limit, a server
+  error or an answer that is not the agreed JSON, the same chunk is sent again, at most three
+  sendings, after 5 and then 20 seconds or the time the provider gave. Chunks already
+  finished are not repeated. If the provider asks for more than 60 seconds, the job does not
+  sleep; the failure goes to the next level.
 - **The whole job.** If the job still fails, the next attempt starts from scratch: it
   downloads the archive again and sends every chunk to the model again. Chunk results from
   the failed attempt are not kept, so their quota is spent again. Worst case: three
   attempts cost three times the quota of one review.
 
+A failure of GitHub is handled at the second level only. `GitHubClient` never retries and
+never waits: it reports a failure with a code, a flag that says whether trying again can
+help, and the time GitHub gave for the limit to reset. GitHub is asked before the first
+chunk, so starting over costs no quota of the model, and its hourly limit can take up to an
+hour to reset; postponing the review through `run_after` leaves the worker free for other
+reviews, where a wait inside the job would block the queue.
+
 This is acceptable because repository size is capped (few chunks per review), most
-transient errors are absorbed by the in-job delay, and attempts are limited to three.
-Revisit when large repositories or a public deployment with a daily budget arrive.
+transient errors of the model are absorbed by the in-job delay, and attempts are limited to
+three. Revisit when large repositories or a public deployment with a daily budget arrive.
 
 ### Provider interface
 
@@ -376,6 +457,7 @@ public interface CodeReviewProvider {
     String name();
     String model();
     int promptVersion();
+    ProviderLimits limits();
     List<RawFinding> review(ReviewChunk chunk);
 }
 ```
@@ -383,6 +465,10 @@ public interface CodeReviewProvider {
 `name()`, `model()` and `promptVersion()` are the provider's part of the cache key of an
 analysis. The prompt version is a constant in the code next to the instructions, so it
 changes in the same commit as they do.
+
+`limits()` says how many requests and how many characters the provider accepts in a minute.
+A provider never waits by itself; the job paces its requests to these limits. A limit
+belongs to a provider and its model, so each provider states its own: the fake has none.
 
 A `ReviewChunk` is a list of whole files. A `RawFinding` is a finding as reported: kind,
 category, severity, file path, lines, title and texts, none of it checked yet. The snippet
@@ -413,7 +499,12 @@ tokens.
 
 Defaults: model `gemini-3.5-flash-lite`, request timeout 120 s. A full chunk of Java source
 measured about 71 000 input tokens (2.8 characters per token), so three full chunks a minute
-fit the free limit of 250 000 tokens a minute; pacing the requests is the job's task.
+fit the free limit of 250 000 tokens a minute. The job paces its requests to 12 requests and
+600 000 characters a minute (`app.gemini.requests-per-minute`, `characters-per-minute`),
+below the free limits of 15 requests and 250 000 tokens: 600 000 characters are three full
+chunks, about 214 000 tokens. A review of up to three chunks is not slowed down at all; a
+larger one proceeds at about three chunks a minute. The daily limit of 500 requests is not
+counted locally; when the API reports it, the review fails at once.
 
 The provider never retries and never waits. A failure is a `ProviderException` with one of
 these codes:
@@ -440,8 +531,10 @@ answers recorded from the real API.
 | | RabbitMQ, Redis or Kafka | Another service to run, with no benefit for a single process. |
 | | A job library (JobRunr, db-scheduler) | A new dependency for a mechanism that is small and worth keeping visible. |
 | A retry repeats the whole analysis | Persisting per-chunk results (an `analysis_chunks` table) and resuming from the first unfinished chunk | Needs a new table, cleanup of half-finished analyses, and a guarantee that a repository is split into exactly the same chunks every time. `analyses` would also stop being all-or-nothing. Too much machinery for a rare case with small repositories. |
-| One job at a time (configurable) | Parallel jobs | The free model tier limits requests per minute; parallel jobs would starve each other. |
-| No open transaction during HTTP calls | The whole job in one `@Transactional` method | A transaction would hold a database connection for minutes. Three short transactions instead: claim, update progress, save result. |
+| One job at a time | Parallel jobs | The free model tier limits requests per minute; parallel jobs would starve each other. |
+| No open transaction during HTTP calls | The whole job in one `@Transactional` method | A transaction would hold a database connection for minutes. Short transactions instead, one for every write of the job (claim, each step, progress, result), all in `ReviewJobStore`. |
+| Requests to the model paced by the job | Waiting inside the provider; a fixed pause between requests | A provider that waits cannot be tested without time passing, and a fixed pause slows small repositories for nothing. |
+| A partial analysis completes the review | Failing the review when one chunk cannot be reviewed | A repository with one file the model refuses could never be reviewed. The report says how many files are missing. |
 | Commit SHA resolved by the worker | Resolved in `POST /api/reviews` | Submit stays fast and independent of GitHub. Cost: a missing repository is reported on the progress screen, not at submit. |
 | One zip archive download | Contents API, file by file | Without a token GitHub allows 60 requests an hour; a 50-file repository would use them at once. The archive needs three requests in total (two when the commit is already cached) and is read with JDK classes. |
 | | `git clone` | Requires `git` in the container and temporary directory management. |
