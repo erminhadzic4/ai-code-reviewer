@@ -13,12 +13,13 @@ import org.springframework.test.context.ActiveProfiles;
 /**
  * Full application context with MockMvc and a real PostgreSQL in a container.
  * Every test using this annotation shares one context, and therefore one container.
+ * The clock and the sleeper are test doubles: time passes only when a test moves it.
  */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
 @SpringBootTest
 @AutoConfigureMockMvc
-@Import(TestcontainersConfiguration.class)
+@Import({ TestcontainersConfiguration.class, TestTimeConfiguration.class })
 @ActiveProfiles("test")
 public @interface IntegrationTest {
 }
