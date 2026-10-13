@@ -9,9 +9,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *
  * @param provider which implementation reviews the code
  * @param chunkBudget characters of source, line numbers included, sent in one request
+ * @param maxAttempts how often a review is tried before it fails for good; every attempt
+ * repeats the whole review
  */
 @ConfigurationProperties("app.review")
-public record ReviewProperties(ProviderType provider, int chunkBudget) {
+public record ReviewProperties(ProviderType provider, int chunkBudget, int maxAttempts) {
 
 	public ReviewProperties {
 		if (provider == null) {
@@ -19,6 +21,9 @@ public record ReviewProperties(ProviderType provider, int chunkBudget) {
 		}
 		if (chunkBudget <= 0) {
 			throw new IllegalStateException("app.review.chunk-budget must be positive.");
+		}
+		if (maxAttempts <= 0) {
+			throw new IllegalStateException("app.review.max-attempts must be positive.");
 		}
 	}
 

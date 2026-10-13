@@ -103,7 +103,7 @@ class ChunkerTest {
 	}
 
 	private static Chunker chunker(int budget) {
-		return new Chunker(new ReviewProperties(ProviderType.FAKE, budget));
+		return new Chunker(new ReviewProperties(ProviderType.FAKE, budget, 3));
 	}
 
 	private static List<SourceFile> files(int count) {
