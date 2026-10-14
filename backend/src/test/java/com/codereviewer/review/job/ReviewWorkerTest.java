@@ -127,7 +127,7 @@ class ReviewWorkerTest {
 
 		verify(store, times(1)).recover(NOW);
 		verify(store, never()).fail(any(), any(), any());
-		verify(store, never()).requeue(any(), any());
+		verify(store, never()).requeue(any(), any(), any());
 	}
 
 	/** A review as the store hands it over: taken from the queue, on its first attempt. */

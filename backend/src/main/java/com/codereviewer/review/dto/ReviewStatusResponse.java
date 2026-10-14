@@ -20,7 +20,8 @@ import com.codereviewer.review.ReviewStatus;
  * @param retryAt when a review that failed for a passing reason is tried again; set only
  * while it waits in the queue for that time
  * @param cacheHit whether the report comes from an earlier review of the same commit
- * @param error why a failed review failed; {@code null} otherwise
+ * @param error why a failed review failed, or why the last attempt of a queued review failed
+ * when it waits for another one; {@code null} otherwise
  */
 public record ReviewStatusResponse(UUID id, String repo, String branch, String commitSha, ReviewStatus status,
 		ReviewStage stage, int chunksDone, int chunksTotal, int attempt, int maxAttempts, Instant retryAt,

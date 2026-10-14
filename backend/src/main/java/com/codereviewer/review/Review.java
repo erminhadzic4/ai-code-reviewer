@@ -117,6 +117,8 @@ public class Review {
 		attempts++;
 		chunksDone = 0;
 		chunksTotal = 0;
+		errorCode = null;
+		errorMessage = null;
 		startedAt = now;
 	}
 
@@ -161,14 +163,28 @@ public class Review {
 		finishedAt = now;
 	}
 
-	/** Back into the queue, for another attempt no earlier than {@code runAfter}. */
+	/** Back into the queue without an error, as after a restart that interrupted the attempt. */
 	public void requeue(Instant runAfter) {
+		requeue(runAfter, null, null);
+	}
+
+	/**
+	 * Back into the queue, for another attempt no earlier than {@code runAfter}. The error of
+	 * the failed attempt is kept while the review waits, so a client can say why; the next
+	 * start clears it.
+	 *
+	 * @param errorCode why the attempt failed; {@code null} when it did not fail
+	 * @param errorMessage a message that is safe to show; cut to what the column holds
+	 */
+	public void requeue(Instant runAfter, String errorCode, String errorMessage) {
 		require(status == ReviewStatus.RUNNING, "requeue");
 		status = ReviewStatus.QUEUED;
 		stage = null;
 		chunksDone = 0;
 		chunksTotal = 0;
 		this.runAfter = runAfter;
+		this.errorCode = errorCode;
+		this.errorMessage = errorCode == null ? null : cut(errorMessage);
 	}
 
 	/**
@@ -183,9 +199,13 @@ public class Review {
 		status = ReviewStatus.FAILED;
 		stage = null;
 		this.errorCode = errorCode;
-		this.errorMessage = errorMessage == null || errorMessage.length() <= MAX_ERROR_MESSAGE_LENGTH ? errorMessage
-				: errorMessage.substring(0, MAX_ERROR_MESSAGE_LENGTH);
+		this.errorMessage = cut(errorMessage);
 		finishedAt = now;
+	}
+
+	private static String cut(String message) {
+		return message == null || message.length() <= MAX_ERROR_MESSAGE_LENGTH ? message
+				: message.substring(0, MAX_ERROR_MESSAGE_LENGTH);
 	}
 
 	private void setProgress(int chunksDone, int chunksTotal) {

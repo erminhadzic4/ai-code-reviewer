@@ -1,0 +1,62 @@
+.diff {
+  margin: 0;
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: 1.7;
+  overflow: hidden;
+}
+
+.scroller {
+  padding: var(--space-2) 0;
+  overflow-x: auto;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: var(--gutter) var(--gutter) 1ch auto;
+  column-gap: var(--space-3);
+  min-width: max-content;
+  padding: 0 var(--space-4) 0 var(--space-3);
+  color: var(--color-text-muted);
+}
+
+.number {
+  color: var(--color-text-faint);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+.sign {
+  user-select: none;
+}
+
+.code {
+  font: inherit;
+  white-space: pre;
+}
+
+.marked {
+  background: var(--color-warning-bg);
+  color: var(--color-text);
+}
+
+.removed {
+  background: var(--color-diff-removed-bg);
+  color: var(--color-diff-removed);
+}
+
+.added {
+  background: var(--color-diff-added-bg);
+  color: var(--color-diff-added);
+}
+
+.removed .number,
+.added .number {
+  color: inherit;
+  opacity: 0.7;
+}

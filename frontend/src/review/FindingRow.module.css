@@ -1,0 +1,143 @@
+.item {
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.item:first-child {
+  border-top: none;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr) auto 112px 12px;
+  align-items: center;
+  gap: var(--space-4);
+  width: 100%;
+  min-height: 42px;
+  padding: var(--space-2) var(--space-4);
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.row:hover {
+  background: var(--color-surface-raised);
+}
+
+.title {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.location {
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.category {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.chevron {
+  fill: none;
+  stroke: var(--color-text-faint);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.open .chevron {
+  transform: rotate(180deg);
+}
+
+.open .row {
+  background: var(--color-surface-raised);
+}
+
+.details {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
+  align-items: start;
+  gap: var(--space-5);
+  padding: var(--space-4) var(--space-4) var(--space-5);
+  background: var(--color-surface-raised);
+  animation: appear var(--duration-fast) var(--ease-out);
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-width: 65ch;
+}
+
+.heading {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.heading:first-child {
+  margin-top: 0;
+}
+
+.copy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.copyStatus {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+@keyframes appear {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (max-width: 860px) {
+  .row {
+    grid-template-columns: auto minmax(0, 1fr) 12px;
+    grid-template-areas:
+      'level location chevron'
+      'title title title';
+    row-gap: var(--space-1);
+  }
+
+  .level {
+    grid-area: level;
+  }
+
+  .location {
+    grid-area: location;
+  }
+
+  .title {
+    grid-area: title;
+  }
+
+  .chevron {
+    grid-area: chevron;
+  }
+
+  .category {
+    display: none;
+  }
+
+  .details {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

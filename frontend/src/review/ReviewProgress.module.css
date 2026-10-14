@@ -1,0 +1,111 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: 720px;
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 2px solid var(--color-border);
+  color: var(--color-text-faint);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  transition:
+    border-color var(--duration-base) var(--ease-out),
+    color var(--duration-base) var(--ease-out);
+}
+
+.stepIndex {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.done {
+  border-top-color: var(--color-text-muted);
+  color: var(--color-text-muted);
+}
+
+.current {
+  border-top-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+.sentence {
+  font-size: var(--text-base);
+  font-weight: 500;
+}
+
+.meter {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.track {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-meter-track);
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  background: var(--color-text);
+  transform: scaleX(var(--fraction));
+  transform-origin: left;
+  transition: transform var(--duration-base) var(--ease-out);
+}
+
+.meterText {
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.reason {
+  color: var(--color-text-muted);
+}
+
+.reasonLabel {
+  color: var(--color-warning);
+  font-weight: 600;
+}
+
+.code {
+  margin-left: var(--space-2);
+  color: var(--color-text-faint);
+  font-size: var(--text-xs);
+}
+
+.note {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border-subtle);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+@media (max-width: 480px) {
+  .steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

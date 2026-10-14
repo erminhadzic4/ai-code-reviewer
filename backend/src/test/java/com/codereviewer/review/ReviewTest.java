@@ -124,6 +124,48 @@ class ReviewTest {
 	}
 
 	@Test
+	void requeuedReviewKeepsTheReasonItsAttemptFailed() {
+		Review review = running();
+
+		review.requeue(NOW.plusSeconds(60), "RATE_LIMITED", "GitHub rate limit reached");
+
+		assertThat(review.getErrorCode()).isEqualTo("RATE_LIMITED");
+		assertThat(review.getErrorMessage()).isEqualTo("GitHub rate limit reached");
+	}
+
+	@Test
+	void reviewRequeuedWithoutAFailureHasNoError() {
+		Review review = running();
+		review.requeue(NOW, "RATE_LIMITED", "GitHub rate limit reached");
+		review.start(NOW);
+
+		review.requeue(NOW);
+
+		assertThat(review.getErrorCode()).isNull();
+		assertThat(review.getErrorMessage()).isNull();
+	}
+
+	@Test
+	void nextStartClearsTheErrorOfTheAttemptBefore() {
+		Review review = running();
+		review.requeue(NOW, "RATE_LIMITED", "GitHub rate limit reached");
+
+		review.start(NOW.plusSeconds(60));
+
+		assertThat(review.getErrorCode()).isNull();
+		assertThat(review.getErrorMessage()).isNull();
+	}
+
+	@Test
+	void longMessageOfARequeuedReviewIsCutToTheColumn() {
+		Review review = running();
+
+		review.requeue(NOW, "RATE_LIMITED", "x".repeat(Review.MAX_ERROR_MESSAGE_LENGTH + 10));
+
+		assertThat(review.getErrorMessage()).hasSize(Review.MAX_ERROR_MESSAGE_LENGTH);
+	}
+
+	@Test
 	void everyStartIsAnotherAttempt() {
 		Review review = running();
 		review.requeue(NOW);

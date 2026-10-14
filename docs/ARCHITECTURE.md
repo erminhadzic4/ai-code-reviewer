@@ -257,7 +257,7 @@ least 32 bytes.
 | `POST /api/reviews` `{repoUrl}` | submit | 202 with `Location: /api/reviews/{id}` and the status of the new review | 400 invalid URL or empty field, 401 |
 | `GET /api/reviews/{id}` | status (polled) | 200 status | 400 if the id is not a UUID, 401, 404 |
 | `GET /api/reviews/{id}/result` | report | 200 `{scores, counts, stats, findings[], goodPractices[]}` | 400, 401, 404, 409 if not `COMPLETED` |
-| `GET /api/reviews?page=&size=` | the user's history (arrives with the frontend, M7) | 200 page | 401 |
+| `GET /api/reviews?page=&size=` | the user's history, newest first; `page` from 0, `size` 20 by default and at most 50 | 200 `{items[], page, size, totalItems}` | 400 page below 0 or size below 1, 401 |
 
 The status:
 
@@ -276,8 +276,12 @@ The status:
 - `attempt` counts the starts of the review. `retryAt` is set only while the review is
   `QUEUED` and waits for a time that is still ahead, after a failure that can pass. A new
   review, and one put back into the queue after a restart, have none.
-- `error` is `{code, message}` when the review is `FAILED`, otherwise null. The code is one of
-  `GitHubErrorCode`, `ProviderErrorCode` or `ReviewErrorCode`.
+- `error` is `{code, message}` when the review is `FAILED`, and when it is `QUEUED` after a
+  failed attempt (the reason of that attempt, kept until the next one starts); otherwise
+  null. The code is one of `GitHubErrorCode`, `ProviderErrorCode` or `ReviewErrorCode`.
+
+A history item is `{id, repo, branch, commitSha, status, overallScore, createdAt,
+finishedAt}`; `overallScore` is set only for a completed review.
 
 In the report, `counts` is `{critical, warnings, codeSmells, goodPractices}` and `stats` is
 `{filesAnalyzed, filesSkipped, filesFailed, linesAnalyzed, findingsDiscarded}`; a report with
@@ -615,14 +619,30 @@ The `db` service and `.env.example` arrived in M1 with the first table; the `bac
 ## 7. Frontend notes
 
 The frontend follows the approved frontend design mockup (dark theme: landing page and
-review report). Colours, fonts and spacing live in one file of CSS variables
-(`frontend/src/styles/tokens.css`); components use CSS modules.
+review report), made denser for a tool that shows many findings. Colours, fonts, spacing,
+radii, layers and motion live in one file of CSS variables
+(`frontend/src/styles/tokens.css`); components use CSS modules. The three font families
+are served from `frontend/public/fonts` (SIL Open Font License).
 
+Routes (`react-router`): `/` landing, `/login`, `/register`, `/reviews` history,
+`/reviews/:id` one review, anything else a not-found page. Both review routes need a
+signed-in user. `/reviews/:id` shows whatever the status says: progress while the review
+is queued or running, the failure, or the report.
+
+- `src/api/client.ts` adds the stored token to every request and turns problem details
+  into an `ApiError`. A 401 on a request that carried a token signs the user out.
 - The landing form requires a signed-in user. A visitor who is not signed in is sent to
   login and the URL they entered is kept.
+- The review page polls the status every 2 s; the next request is planned only after the
+  last one answered, and polling stops at `COMPLETED` or `FAILED`. A network failure or a
+  5xx is retried, a 4xx is not.
 - The short verdict next to the overall score is chosen from fixed templates by score and
-  counters; it is not written by the model.
-- The report's filters (all, critical, warnings, smells) work on data already in the browser.
+  counters (`src/review/verdict.ts`); it is not written by the model.
+- Findings are grouped by file, the file with the most severe finding first; inside a file
+  they follow their lines. The report's filters (all, critical, warnings, smells) work on
+  data already in the browser and carry the counters.
+- The diff view numbers old and new lines in separate columns (`src/review/diff.ts`).
+- Text from the model is always rendered as text, never as HTML.
 
 Out of scope for V1: exporting a report (planned for V2), dismissing individual findings
 (needs per-user state on a shared analysis), and forcing a fresh analysis of a commit that

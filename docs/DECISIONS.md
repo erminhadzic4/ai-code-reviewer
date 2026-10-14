@@ -510,3 +510,44 @@ Full reasoning and rejected alternatives are in `ARCHITECTURE.md`. The main deci
   the provider is the fake one behind a wrapper that can be told to fail. Only the tests of
   the timer itself and of the real sleeper let real time pass, bounded and for a few
   milliseconds.
+
+## 2026-10-14: M7 frontend
+- **The mockup is followed in colour and type, but made denser.** Findings are rows of about
+  40 px grouped by file, not one card each; the overall score, its verdict and the three
+  sub-scores share one band instead of a ring and four counter tiles; the counters are the
+  filter buttons. Radii are 3 to 10 px instead of 12 to 28, and pill shapes are gone. The
+  landing page drops the badge above the headline, the three equal cards and the closing
+  call-to-action box. Rejected: the mockup as drawn, which shows about four findings on a
+  screen where a real repository has dozens.
+- **Sub-score bars are neutral.** Rejected: yellow and green by value, which read as the
+  colours of finding levels.
+- **`react-router` is the one new dependency.** Rejected: a router of our own over the
+  History API (code to maintain and test for no gain); TanStack Query or SWR (a dependency
+  for three endpoints and one poll); axios (`fetch` is enough); a component library.
+- **Fonts are served by the frontend** as three variable woff2 files from the fonts' own
+  repositories. Rejected: Google Fonts at runtime (an external service, no offline use);
+  `@fontsource` packages (three dependencies).
+- **One route per review.** `/reviews/:id` shows progress, failure or report as the status
+  says. Rejected: separate progress and report routes, which need a redirect when the status
+  changes.
+- **Polling with a chain of timeouts.** The next request is planned when the last one has
+  answered. Rejected: `setInterval`, which stacks requests on a slow network; server-sent
+  events or WebSockets, which need backend work the 2 s poll does not justify.
+- **A queued review shows why its last attempt failed** (`Review.requeue` keeps the error
+  code and message; the next start clears them). It reuses the `error_code` and
+  `error_message` columns, so no migration. Rejected: separate `last_error_*` columns for
+  the same data; showing only the attempt number and the retry time.
+- **History is paged by the backend** with a response of our own shape. Rejected: returning
+  Spring's `Page` (its JSON is not meant to be stable); cursor paging (not needed locally);
+  one unpaged list.
+- **The URL is checked by the backend only.** The form catches an empty field and shows the
+  backend's message otherwise. Rejected: a GitHub URL pattern in the frontend, which would
+  keep the rule in two places.
+- **The failure screen offers "Try again" only where it can help.** A missing, empty or too
+  large repository, or one without reviewable files, offers another repository instead.
+- **The diff has two line-number columns**, old and new, sized to the largest number.
+  Rejected: one column that repeats the number of a replaced line.
+- **Motion is limited** to colour changes on hover, a slight press on the primary button, a
+  fade when a finding opens and the progress bar; all of it stops under reduced motion.
+- **Local lint stays in CI.** The linter binary cannot run on the development machine.
+  Rejected: running it in a container, an extra setup for one command CI already runs.

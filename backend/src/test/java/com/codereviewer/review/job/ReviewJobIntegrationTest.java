@@ -241,7 +241,9 @@ class ReviewJobIntegrationTest {
 		assertThat(stored.getStatus()).isEqualTo(ReviewStatus.QUEUED);
 		assertThat(stored.getStage()).isNull();
 		assertThat(stored.getAttempts()).isEqualTo(1);
-		assertThat(stored.getErrorCode()).isNull();
+		// The reason is kept while the review waits, so the progress screen can show it.
+		assertThat(stored.getErrorCode()).isEqualTo("GITHUB_UNAVAILABLE");
+		assertThat(stored.getErrorMessage()).isNotBlank();
 		assertThat(stored.getFinishedAt()).isNull();
 		assertThat(stored.getRunAfter()).isCloseTo(clock.instant().plus(Duration.ofMinutes(1)),
 				within(5, ChronoUnit.SECONDS));
