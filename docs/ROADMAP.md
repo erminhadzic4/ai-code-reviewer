@@ -23,7 +23,7 @@ Scope for now: runs locally. Public deployment is a later option (see "Later").
 - [x] M5 Scoring formula: scores computed from the findings by a pure function
 - [x] M6 Async jobs: submit returns a job id, status polling, error handling, retry,
       saving analyses and findings, cache by commit SHA
-- [ ] M7 Frontend, following the approved frontend design mockup (dark theme: landing page
+- [x] M7 Frontend, following the approved frontend design mockup (dark theme: landing page
       and review report): login/register, submit form, progress screen, report dashboard,
       issue list with filters and diff-style suggestions
 - [ ] M8 Polish: Swagger, one-command local run (docker-compose, `.env.example`),
