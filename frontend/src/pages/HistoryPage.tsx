@@ -23,19 +23,26 @@ const STATUS_LABEL: Record<ReviewStatus, string> = {
 export function HistoryPage() {
   const [params] = useSearchParams()
   const pageNumber = Math.max(1, Number.parseInt(params.get('page') ?? '1', 10) || 1)
-  const [page, setPage] = useState<Page<ReviewSummary> | null>(null)
-  const [error, setError] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
+  // What was loaded, and for which page and attempt: a stale answer counts as loading.
+  const key = `${pageNumber}:${attempt}`
+  const [loaded, setLoaded] = useState<{ key: string; page: Page<ReviewSummary> | null; error: string | null }>({
+    key: '',
+    page: null,
+    error: null,
+  })
+  const page = loaded.key === key ? loaded.page : null
+  const error = loaded.key === key ? loaded.error : null
 
   useEffect(() => {
     const controller = new AbortController()
-    setPage(null)
-    setError(null)
+    const requested = `${pageNumber}:${attempt}`
     getReviewHistory(pageNumber - 1, PAGE_SIZE, controller.signal)
-      .then(setPage)
+      .then((result) => setLoaded({ key: requested, page: result, error: null }))
       .catch((e: unknown) => {
         if (!controller.signal.aborted) {
-          setError(e instanceof ApiError ? e.message : 'Your reviews could not be loaded.')
+          const message = e instanceof ApiError ? e.message : 'Your reviews could not be loaded.'
+          setLoaded({ key: requested, page: null, error: message })
         }
       })
     return () => controller.abort()

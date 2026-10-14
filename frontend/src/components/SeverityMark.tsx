@@ -1,7 +1,7 @@
 import type { FindingLevel } from '../api/types'
 import styles from './SeverityMark.module.css'
 
-export const LEVEL_LABEL: Record<FindingLevel, string> = {
+const LEVEL_LABEL: Record<FindingLevel, string> = {
   CRITICAL: 'Critical',
   WARNING: 'Warning',
   SMELL: 'Smell',

@@ -31,19 +31,27 @@ const EMPTY_FILTER: Record<Filter, string> = {
 }
 
 export function ReviewReport({ review }: { review: ReviewStatusResponse }) {
-  const [result, setResult] = useState<ReviewResult | null>(null)
-  const [error, setError] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
   const { resubmit, busy, error: resubmitError } = useResubmit(review.repo)
+  // What was loaded, and for which review and attempt: a stale answer counts as loading.
+  const key = `${review.id}:${attempt}`
+  const [loaded, setLoaded] = useState<{ key: string; result: ReviewResult | null; error: string | null }>({
+    key: '',
+    result: null,
+    error: null,
+  })
+  const result = loaded.key === key ? loaded.result : null
+  const error = loaded.key === key ? loaded.error : null
 
   useEffect(() => {
     const controller = new AbortController()
-    setError(null)
+    const requested = `${review.id}:${attempt}`
     getReviewResult(review.id, controller.signal)
-      .then(setResult)
+      .then((report) => setLoaded({ key: requested, result: report, error: null }))
       .catch((e: unknown) => {
         if (!controller.signal.aborted) {
-          setError(e instanceof ApiError ? e.message : 'The report could not be loaded.')
+          const message = e instanceof ApiError ? e.message : 'The report could not be loaded.'
+          setLoaded({ key: requested, result: null, error: message })
         }
       })
     return () => controller.abort()

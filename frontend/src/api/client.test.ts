@@ -19,7 +19,7 @@ describe('apiRequest', () => {
 
     await expect(apiRequest('/api/auth/me')).resolves.toEqual({ id: 1, email: 'a@b.co' })
 
-    const headers = fetchMock.mock.calls[0][1]?.headers as Record<string, string>
+    const headers = fetchMock.mock.calls[0][1]!.headers as Record<string, string>
     expect(headers.Authorization).toBe('Bearer abc')
   })
 
@@ -28,9 +28,9 @@ describe('apiRequest', () => {
 
     await apiRequest('/api/auth/login', { method: 'POST', body: { email: 'a@b.co' } })
 
-    const init = fetchMock.mock.calls[0][1]
-    expect(init?.body).toBe('{"email":"a@b.co"}')
-    expect((init?.headers as Record<string, string>).Authorization).toBeUndefined()
+    const init = fetchMock.mock.calls[0][1]!
+    expect(init.body).toBe('{"email":"a@b.co"}')
+    expect((init.headers as Record<string, string>).Authorization).toBeUndefined()
   })
 
   it('turns a problem detail into an ApiError with the field messages', async () => {

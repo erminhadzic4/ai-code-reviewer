@@ -21,17 +21,18 @@ function isFinal(review: ReviewStatusResponse): boolean {
  * answered, so a slow network never stacks requests.
  */
 export function useReviewStatus(id: string): ReviewStatusState {
-  const [state, setState] = useState<ReviewStatusState>({ review: null, error: null })
+  // The state remembers which review it belongs to, so another id starts empty without a
+  // reset inside the effect.
+  const [state, setState] = useState<ReviewStatusState & { id: string }>({ id, review: null, error: null })
 
   useEffect(() => {
     const controller = new AbortController()
     let timer: ReturnType<typeof setTimeout> | undefined
-    setState({ review: null, error: null })
 
     async function poll() {
       try {
         const review = await getReviewStatus(id, controller.signal)
-        setState({ review, error: null })
+        setState({ id, review, error: null })
         if (!isFinal(review)) {
           timer = setTimeout(poll, POLL_INTERVAL_MS)
         }
@@ -40,7 +41,7 @@ export function useReviewStatus(id: string): ReviewStatusState {
           return
         }
         const error = e instanceof ApiError ? e : new ApiError(0, 'The review could not be loaded.')
-        setState((previous) => ({ review: previous.review, error }))
+        setState((previous) => ({ id, review: previous.id === id ? previous.review : null, error }))
         // A network failure or a server error can pass; a 404 or a 401 cannot.
         if (error.status === 0 || error.status >= 500) {
           timer = setTimeout(poll, POLL_INTERVAL_MS)
@@ -55,5 +56,5 @@ export function useReviewStatus(id: string): ReviewStatusState {
     }
   }, [id])
 
-  return state
+  return state.id === id ? { review: state.review, error: state.error } : { review: null, error: null }
 }
