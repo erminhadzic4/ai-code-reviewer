@@ -5,6 +5,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -28,5 +31,12 @@ public interface ReviewRepository extends JpaRepository<Review, UUID> {
 
 	/** A review only if it belongs to this user; someone else's is as absent as a missing one. */
 	Optional<Review> findByIdAndUserId(UUID id, Long userId);
+
+	/**
+	 * A page of a user's reviews; the order comes with the {@code pageable}. The analysis is
+	 * loaded in the same query, because every completed row shows its score.
+	 */
+	@EntityGraph(attributePaths = "analysis")
+	Page<Review> findByUserId(Long userId, Pageable pageable);
 
 }

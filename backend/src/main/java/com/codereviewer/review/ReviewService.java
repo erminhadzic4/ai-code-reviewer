@@ -12,10 +12,15 @@ import com.codereviewer.github.InvalidRepoUrlException;
 import com.codereviewer.github.RepoRef;
 import com.codereviewer.github.RepoUrlParser;
 import com.codereviewer.provider.FindingKind;
+import com.codereviewer.review.dto.PageResponse;
 import com.codereviewer.review.dto.ReviewResultResponse;
 import com.codereviewer.review.dto.ReviewStatusResponse;
+import com.codereviewer.review.dto.ReviewSummaryResponse;
 import com.codereviewer.review.dto.SubmitReviewRequest;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,6 +32,8 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class ReviewService {
+
+	static final int MAX_PAGE_SIZE = 50;
 
 	private final ReviewRepository reviews;
 	private final FindingRepository findings;
@@ -57,6 +64,24 @@ public class ReviewService {
 			// its user until it expires.
 			throw new AuthenticationRequiredException();
 		}
+	}
+
+	/**
+	 * The user's reviews, newest first. A size above {@value #MAX_PAGE_SIZE} is lowered to it.
+	 *
+	 * @throws InvalidPageException if the page is below 0 or the size below 1
+	 */
+	@Transactional(readOnly = true)
+	public PageResponse<ReviewSummaryResponse> history(AuthenticatedUser user, int page, int size) {
+		if (page < 0 || size < 1) {
+			throw new InvalidPageException();
+		}
+		int pageSize = Math.min(size, MAX_PAGE_SIZE);
+		// The id breaks ties between reviews created in the same instant, so pages never overlap.
+		Sort newestFirst = Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"));
+		Page<Review> found = reviews.findByUserId(user.id(), PageRequest.of(page, pageSize, newestFirst));
+		return new PageResponse<>(found.map(ReviewService::toSummary).getContent(), page, pageSize,
+				found.getTotalElements());
 	}
 
 	@Transactional(readOnly = true)
@@ -109,6 +134,13 @@ public class ReviewService {
 	private Instant retryAt(Review review) {
 		boolean waiting = review.getStatus() == ReviewStatus.QUEUED && review.getRunAfter().isAfter(clock.instant());
 		return waiting ? review.getRunAfter() : null;
+	}
+
+	private static ReviewSummaryResponse toSummary(Review review) {
+		Integer score = review.getStatus() == ReviewStatus.COMPLETED ? review.getAnalysis().getOverallScore() : null;
+		return new ReviewSummaryResponse(review.getId(), review.getRepoOwner() + "/" + review.getRepoName(),
+				review.getBranch(), review.getCommitSha(), review.getStatus(), score, review.getCreatedAt(),
+				review.getFinishedAt());
 	}
 
 	private static ReviewResultResponse.Finding toResponse(Finding finding) {

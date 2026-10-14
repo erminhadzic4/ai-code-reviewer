@@ -4,8 +4,10 @@ import java.net.URI;
 import java.util.UUID;
 
 import com.codereviewer.auth.AuthenticatedUser;
+import com.codereviewer.review.dto.PageResponse;
 import com.codereviewer.review.dto.ReviewResultResponse;
 import com.codereviewer.review.dto.ReviewStatusResponse;
+import com.codereviewer.review.dto.ReviewSummaryResponse;
 import com.codereviewer.review.dto.SubmitReviewRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -15,6 +17,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -33,6 +36,12 @@ public class ReviewController {
 			@Valid @RequestBody SubmitReviewRequest request) {
 		ReviewStatusResponse review = reviewService.submit(principal, request);
 		return ResponseEntity.accepted().location(URI.create("/api/reviews/" + review.id())).body(review);
+	}
+
+	@GetMapping
+	PageResponse<ReviewSummaryResponse> history(@AuthenticationPrincipal AuthenticatedUser principal,
+			@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+		return reviewService.history(principal, page, size);
 	}
 
 	@GetMapping("/{id}")

@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -225,6 +226,7 @@ class ReviewApiIntegrationTest {
 				.content("{\"repoUrl\": \"" + REPO_URL + "\"}")).andExpect(status().isUnauthorized());
 		mockMvc.perform(get("/api/reviews/" + id)).andExpect(status().isUnauthorized());
 		mockMvc.perform(get("/api/reviews/" + id + "/result")).andExpect(status().isUnauthorized());
+		mockMvc.perform(get("/api/reviews")).andExpect(status().isUnauthorized());
 		assertThat(count("reviews")).isEqualTo(1);
 	}
 
@@ -459,6 +461,97 @@ class ReviewApiIntegrationTest {
 				.andExpect(jsonPath("$.retryAt").value((Object) null));
 	}
 
+	// history
+
+	@Test
+	void historyIsEmptyForANewUser() throws Exception {
+		getHistory(token, "").andExpect(status().isOk())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+				.andExpect(jsonPath("$.items.length()").value(0))
+				.andExpect(jsonPath("$.page").value(0))
+				.andExpect(jsonPath("$.size").value(20))
+				.andExpect(jsonPath("$.totalItems").value(0))
+				.andExpect(jsonPath("$.length()").value(4));
+	}
+
+	@Test
+	void historyListsOnlyTheUsersOwnReviewsNewestFirst() throws Exception {
+		String oldest = submitCreatedAt(token, "https://github.com/octo/one", 3);
+		String newest = submitCreatedAt(token, "https://github.com/octo/three", 1);
+		String middle = submitCreatedAt(token, "https://github.com/octo/two", 2);
+		submit(jwtService.issue(newUser()), REPO_URL).andExpect(status().isAccepted());
+
+		getHistory(token, "").andExpect(status().isOk())
+				.andExpect(jsonPath("$.totalItems").value(3))
+				.andExpect(jsonPath("$.items[*].id").value(contains(newest, middle, oldest)))
+				.andExpect(jsonPath("$.items[*].repo").value(contains("octo/three", "octo/two", "octo/one")))
+				.andExpect(jsonPath("$.items[0].status").value("QUEUED"))
+				.andExpect(jsonPath("$.items[0].branch").value((Object) null))
+				.andExpect(jsonPath("$.items[0].commitSha").value((Object) null))
+				.andExpect(jsonPath("$.items[0].overallScore").value((Object) null))
+				.andExpect(jsonPath("$.items[0].createdAt").isNotEmpty())
+				.andExpect(jsonPath("$.items[0].finishedAt").value((Object) null))
+				.andExpect(jsonPath("$.items[0].length()").value(8));
+	}
+
+	@Test
+	void historyIsSplitIntoPages() throws Exception {
+		String first = submitCreatedAt(token, "https://github.com/octo/one", 3);
+		String second = submitCreatedAt(token, "https://github.com/octo/two", 2);
+		String third = submitCreatedAt(token, "https://github.com/octo/three", 1);
+
+		getHistory(token, "?page=0&size=2").andExpect(status().isOk())
+				.andExpect(jsonPath("$.items[*].id").value(contains(third, second)))
+				.andExpect(jsonPath("$.page").value(0))
+				.andExpect(jsonPath("$.size").value(2))
+				.andExpect(jsonPath("$.totalItems").value(3));
+		getHistory(token, "?page=1&size=2").andExpect(status().isOk())
+				.andExpect(jsonPath("$.items[*].id").value(contains(first)))
+				.andExpect(jsonPath("$.page").value(1));
+		getHistory(token, "?page=2&size=2").andExpect(status().isOk())
+				.andExpect(jsonPath("$.items.length()").value(0))
+				.andExpect(jsonPath("$.totalItems").value(3));
+	}
+
+	@Test
+	void pageSizeAboveTheLimitIsLowered() throws Exception {
+		getHistory(token, "?size=500").andExpect(status().isOk()).andExpect(jsonPath("$.size").value(50));
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "?page=-1", "?size=0", "?size=-5" })
+	void pageOrSizeBelowItsMinimumIsABadRequest(String query) throws Exception {
+		getHistory(token, query).andExpect(status().isBadRequest())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+				.andExpect(jsonPath("$.detail").value("Page must be 0 or more and size 1 or more"));
+	}
+
+	@Test
+	void pageThatIsNotANumberIsABadRequest() throws Exception {
+		getHistory(token, "?page=first").andExpect(status().isBadRequest())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+	}
+
+	@Test
+	void completedReviewInTheHistoryShowsItsScoreAndCommit() throws Exception {
+		GitHubStubs.repository(github, REPO, SHA, repository());
+		String done = submitCreatedAt(token, REPO_URL, 3);
+		worker.runOnce();
+		String failed = submitCreatedAt(token, "https://github.com/octo/missing", 2);
+		worker.runOnce();
+
+		getHistory(token, "").andExpect(status().isOk())
+				.andExpect(jsonPath("$.items[*].id").value(contains(failed, done)))
+				.andExpect(jsonPath("$.items[0].status").value("FAILED"))
+				.andExpect(jsonPath("$.items[0].overallScore").value((Object) null))
+				.andExpect(jsonPath("$.items[0].finishedAt").isNotEmpty())
+				.andExpect(jsonPath("$.items[1].status").value("COMPLETED"))
+				.andExpect(jsonPath("$.items[1].overallScore").value(81))
+				.andExpect(jsonPath("$.items[1].branch").value("main"))
+				.andExpect(jsonPath("$.items[1].commitSha").value(SHA))
+				.andExpect(jsonPath("$.items[1].finishedAt").isNotEmpty());
+	}
+
 	// helpers
 
 	private static byte[] repository() {
@@ -487,6 +580,20 @@ class ReviewApiIntegrationTest {
 
 	private ResultActions getResult(String accessToken, String id) throws Exception {
 		return mockMvc.perform(get("/api/reviews/" + id + "/result").header("Authorization", "Bearer " + accessToken));
+	}
+
+	private ResultActions getHistory(String accessToken, String query) throws Exception {
+		return mockMvc.perform(get("/api/reviews" + query).header("Authorization", "Bearer " + accessToken));
+	}
+
+	// The creation time is set afterwards, so the order of the history does not depend on how
+	// fast the reviews were submitted. The review stays due for the worker.
+	private String submitCreatedAt(String accessToken, String repoUrl, int hoursAgo) throws Exception {
+		String id = idOf(submit(accessToken, repoUrl));
+		Timestamp createdAt = Timestamp.from(clock.instant().minus(Duration.ofHours(hoursAgo)));
+		jdbcTemplate.update("UPDATE reviews SET created_at = ?, run_after = ? WHERE id = ?", createdAt, createdAt,
+				UUID.fromString(id));
+		return id;
 	}
 
 	private static String idOf(ResultActions submitted) throws Exception {
