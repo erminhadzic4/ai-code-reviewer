@@ -53,6 +53,11 @@ pre {
   box-shadow: var(--focus-ring);
 }
 
+/* The skip link moves focus to main; a ring around the whole page would only distract. */
+main:focus-visible {
+  box-shadow: none;
+}
+
 ::placeholder {
   color: var(--color-text-faint);
 }
