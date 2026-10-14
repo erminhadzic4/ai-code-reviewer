@@ -2,7 +2,9 @@ import { Route, Routes } from 'react-router'
 import { RequireAuth } from './auth/RequireAuth'
 import { AppLayout } from './components/AppLayout'
 import { AuthPage } from './pages/AuthPage'
+import { HistoryPage } from './pages/HistoryPage'
 import { LandingPage } from './pages/LandingPage'
+import { NotFoundPage } from './pages/NotFoundPage'
 import { ReviewPage } from './pages/ReviewPage'
 
 function App() {
@@ -13,6 +15,14 @@ function App() {
         <Route path="login" element={<AuthPage key="login" mode="login" />} />
         <Route path="register" element={<AuthPage key="register" mode="register" />} />
         <Route
+          path="reviews"
+          element={
+            <RequireAuth>
+              <HistoryPage />
+            </RequireAuth>
+          }
+        />
+        <Route
           path="reviews/:id"
           element={
             <RequireAuth>
@@ -20,6 +30,7 @@ function App() {
             </RequireAuth>
           }
         />
+        <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
   )

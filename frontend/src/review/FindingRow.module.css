@@ -64,6 +64,7 @@
 .details {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
+  align-items: start;
   gap: var(--space-5);
   padding: var(--space-4) var(--space-4) var(--space-5);
   background: var(--color-surface-raised);

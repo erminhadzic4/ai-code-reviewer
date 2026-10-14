@@ -16,7 +16,7 @@ const EXAMPLE: Finding = {
   severity: 'CRITICAL',
   filePath: 'src/main/java/shop/UserRepository.java',
   lineStart: 42,
-  lineEnd: 42,
+  lineEnd: 43,
   title: 'SQL query built from user input',
   explanation: 'The username goes straight into the query string.',
   suggestion: 'Use a parameterized query.',
@@ -74,7 +74,7 @@ export function LandingPage() {
           <figcaption className={styles.exampleHead}>
             <span className={styles.exampleTag}>Example</span>
             <SeverityMark level={EXAMPLE.level} />
-            <span className={styles.exampleLocation}>UserRepository.java:42</span>
+            <span className={styles.exampleLocation}>UserRepository.java:42–43</span>
           </figcaption>
           <p className={styles.exampleTitle}>{EXAMPLE.title}</p>
           <p className={styles.exampleText}>
