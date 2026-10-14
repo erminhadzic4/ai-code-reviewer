@@ -66,6 +66,20 @@ main:focus-visible {
   background: #c8f65d40;
 }
 
+/* The page column every screen sits in. */
+.container {
+  width: 100%;
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+  padding: 0 var(--space-5);
+}
+
+@media (max-width: 480px) {
+  .container {
+    padding: 0 var(--space-4);
+  }
+}
+
 /* Hidden until it receives keyboard focus. */
 .skip-link {
   position: absolute;

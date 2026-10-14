@@ -1,0 +1,31 @@
+.mark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.square {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.CRITICAL {
+  color: var(--color-critical);
+}
+
+.WARNING {
+  color: var(--color-warning);
+}
+
+.SMELL {
+  color: var(--color-smell);
+}
+
+.GOOD_PRACTICE {
+  color: var(--color-good);
+}
