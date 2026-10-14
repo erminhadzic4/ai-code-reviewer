@@ -60,6 +60,8 @@ class ReviewJobStoreIntegrationTest {
 	private static final String SHA = "89abcdef0123456789abcdef0123456789abcdef";
 	private static final String OTHER_SHA = "0123456789abcdef0123456789abcdef01234567";
 	private static final CodeReviewProvider PROVIDER = new FakeReviewProvider();
+	private static final JobFailure UNAVAILABLE = new JobFailure("GITHUB_UNAVAILABLE", "GitHub is unavailable", true,
+			null);
 
 	@Autowired
 	private ReviewJobStore store;
@@ -148,7 +150,7 @@ class ReviewJobStoreIntegrationTest {
 	void reviewIsNotClaimedBeforeItIsDue() {
 		UUID id = queued();
 		store.claimNext(now());
-		store.requeue(id, now().plus(Duration.ofMinutes(5)));
+		store.requeue(id, UNAVAILABLE, now().plus(Duration.ofMinutes(5)));
 
 		assertThat(store.claimNext(now())).isEmpty();
 		clock.advance(Duration.ofMinutes(4));
@@ -383,7 +385,7 @@ class ReviewJobStoreIntegrationTest {
 		store.progress(id, 2, 3);
 		Instant retryAt = now().plus(Duration.ofMinutes(1));
 
-		store.requeue(id, retryAt);
+		store.requeue(id, UNAVAILABLE, retryAt);
 
 		Review stored = stored(id);
 		assertThat(stored.getStatus()).isEqualTo(ReviewStatus.QUEUED);
@@ -392,6 +394,8 @@ class ReviewJobStoreIntegrationTest {
 		assertThat(stored.getChunksDone()).isZero();
 		assertThat(stored.getChunksTotal()).isZero();
 		assertThat(stored.getAttempts()).isEqualTo(1);
+		assertThat(stored.getErrorCode()).isEqualTo("GITHUB_UNAVAILABLE");
+		assertThat(stored.getErrorMessage()).isEqualTo("GitHub is unavailable");
 	}
 
 	@Test
@@ -465,7 +469,7 @@ class ReviewJobStoreIntegrationTest {
 		UUID waiting = queued();
 		Instant retryAt = now().plus(Duration.ofMinutes(5));
 		store.claimNext(now());
-		store.requeue(waiting, retryAt);
+		store.requeue(waiting, UNAVAILABLE, retryAt);
 		UUID completed = running();
 		store.complete(completed, analysis(SHA), List.of(), now());
 		UUID failed = running();

@@ -124,9 +124,15 @@ public class ReviewService {
 		return new ReviewStatusResponse(review.getId(), review.getRepoOwner() + "/" + review.getRepoName(),
 				review.getBranch(), review.getCommitSha(), review.getStatus(), review.getStage(),
 				review.getChunksDone(), review.getChunksTotal(), review.getAttempts(), maxAttempts, retryAt(review),
-				review.isCacheHit(), review.getCreatedAt(), review.getStartedAt(), review.getFinishedAt(),
-				review.getStatus() == ReviewStatus.FAILED
-						? new ReviewStatusResponse.Error(review.getErrorCode(), review.getErrorMessage()) : null);
+				review.isCacheHit(), review.getCreatedAt(), review.getStartedAt(), review.getFinishedAt(), error(review));
+	}
+
+	// A failed review always has an error; a queued one has the error of its last attempt while
+	// it waits for the next one. A running review has none: start clears it.
+	private static ReviewStatusResponse.Error error(Review review) {
+		boolean shown = review.getStatus() == ReviewStatus.FAILED
+				|| (review.getStatus() == ReviewStatus.QUEUED && review.getErrorCode() != null);
+		return shown ? new ReviewStatusResponse.Error(review.getErrorCode(), review.getErrorMessage()) : null;
 	}
 
 	// Only a review that waits for a time still ahead has one. A new review and one put back

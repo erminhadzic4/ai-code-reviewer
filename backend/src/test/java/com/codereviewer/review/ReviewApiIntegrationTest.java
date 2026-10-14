@@ -418,7 +418,7 @@ class ReviewApiIntegrationTest {
 	}
 
 	@Test
-	void reviewThatWaitsForAnotherAttemptShowsWhenItIsTriedAgain() throws Exception {
+	void reviewThatWaitsForAnotherAttemptShowsWhenAndWhyItIsTriedAgain() throws Exception {
 		github.on("/repos/octo/demo", Response.status(503));
 		String id = idOf(submit(token, REPO_URL));
 
@@ -428,7 +428,9 @@ class ReviewApiIntegrationTest {
 				.andExpect(jsonPath("$.status").value("QUEUED"))
 				.andExpect(jsonPath("$.attempt").value(1))
 				.andExpect(jsonPath("$.maxAttempts").value(3))
-				.andExpect(jsonPath("$.error").value((Object) null))
+				.andExpect(jsonPath("$.error.code").value("GITHUB_UNAVAILABLE"))
+				.andExpect(jsonPath("$.error.message").isNotEmpty())
+				.andExpect(jsonPath("$.finishedAt").value((Object) null))
 				.andExpect(jsonPath("$.retryAt").isNotEmpty()));
 		assertThat(Instant.parse(JsonPath.<String>read(body, "$.retryAt")))
 				.isCloseTo(clock.instant().plus(Duration.ofMinutes(1)), within(5, ChronoUnit.SECONDS));
@@ -446,11 +448,26 @@ class ReviewApiIntegrationTest {
 
 		getStatus(token, id).andExpect(jsonPath("$.status").value("QUEUED"))
 				.andExpect(jsonPath("$.attempt").value(1))
-				.andExpect(jsonPath("$.retryAt").value((Object) null));
+				.andExpect(jsonPath("$.retryAt").value((Object) null))
+				.andExpect(jsonPath("$.error.code").value("GITHUB_UNAVAILABLE"));
 	}
 
 	@Test
-	void reviewPutBackAfterARestartHasNoRetryTime() throws Exception {
+	void nextAttemptNoLongerShowsTheErrorOfTheLastOne() throws Exception {
+		github.on("/repos/octo/demo", Response.status(503));
+		String id = idOf(submit(token, REPO_URL));
+		worker.runOnce();
+		clock.advance(Duration.ofMinutes(1));
+
+		store.claimNext(clock.instant());
+
+		getStatus(token, id).andExpect(jsonPath("$.status").value("RUNNING"))
+				.andExpect(jsonPath("$.attempt").value(2))
+				.andExpect(jsonPath("$.error").value((Object) null));
+	}
+
+	@Test
+	void reviewPutBackAfterARestartHasNoRetryTimeAndNoError() throws Exception {
 		String id = idOf(submit(token, REPO_URL));
 		store.claimNext(clock.instant());
 
@@ -458,7 +475,8 @@ class ReviewApiIntegrationTest {
 
 		getStatus(token, id).andExpect(jsonPath("$.status").value("QUEUED"))
 				.andExpect(jsonPath("$.attempt").value(1))
-				.andExpect(jsonPath("$.retryAt").value((Object) null));
+				.andExpect(jsonPath("$.retryAt").value((Object) null))
+				.andExpect(jsonPath("$.error").value((Object) null));
 	}
 
 	// history

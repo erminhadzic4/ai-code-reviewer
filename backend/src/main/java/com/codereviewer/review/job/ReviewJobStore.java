@@ -139,10 +139,10 @@ public class ReviewJobStore {
 		review.complete(stored, false, now);
 	}
 
-	/** Puts a running review back into the queue for another attempt. */
+	/** Puts a running review back into the queue for another attempt, with the reason it failed. */
 	@Transactional
-	public void requeue(UUID reviewId, Instant runAfter) {
-		load(reviewId).requeue(runAfter);
+	public void requeue(UUID reviewId, JobFailure failure, Instant runAfter) {
+		load(reviewId).requeue(runAfter, failure.code(), failure.message());
 	}
 
 	@Transactional

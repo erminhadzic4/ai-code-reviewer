@@ -124,7 +124,7 @@ public class ReviewWorker {
 		Instant now = clock.instant();
 		Optional<Instant> nextAttempt = retryPolicy.nextAttempt(failure, review.getAttempts(), now);
 		if (nextAttempt.isPresent()) {
-			store.requeue(review.getId(), nextAttempt.get());
+			store.requeue(review.getId(), failure, nextAttempt.get());
 			log.warn("Review {} failed on attempt {} with {}; next attempt at {}", review.getId(), review.getAttempts(),
 					failure.code(), nextAttempt.get());
 		}
