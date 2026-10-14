@@ -2,7 +2,7 @@ import { act, fireEvent, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { writeToken } from '../auth/tokenStore'
 import { fakeBackend, problem, type FakeAnswer } from '../test/api'
-import { REVIEW_ID, SHA, status } from '../test/fixtures'
+import { REVIEW_ID, SHA, result, status } from '../test/fixtures'
 import { renderApp } from '../test/renderApp'
 
 const ME = { 'GET /api/auth/me': { status: 200, body: { id: 1, email: 'ana@example.com' } } }
@@ -43,7 +43,7 @@ describe('ReviewPage', () => {
       },
       { status: 200, body: status({ status: 'RUNNING', stage: 'SCORING', attempt: 1, branch: 'main', commitSha: SHA }) },
       { status: 200, body: status({ status: 'COMPLETED', attempt: 1, branch: 'main', commitSha: SHA }) },
-    ])
+    ], { [`GET /api/reviews/${REVIEW_ID}/result`]: { status: 200, body: result() } })
     renderApp(`/reviews/${REVIEW_ID}`)
 
     expect(await screen.findByText('Waiting in the queue. Reviews run one at a time.')).toBeInTheDocument()
@@ -63,6 +63,7 @@ describe('ReviewPage', () => {
 
     await nextPoll()
     expect(screen.queryByText(/Computing the scores/)).not.toBeInTheDocument()
+    expect(await screen.findByText('Solid, with things to fix.')).toBeInTheDocument()
 
     const calls = statusCalls(fetchMock)
     await nextPoll()

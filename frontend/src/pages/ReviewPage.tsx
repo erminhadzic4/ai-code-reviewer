@@ -6,6 +6,7 @@ import { shortSha } from '../review/format'
 import { ReviewFailed } from '../review/ReviewFailed'
 import { ReviewHeader } from '../review/ReviewHeader'
 import { ReviewProgress } from '../review/ReviewProgress'
+import { ReviewReport } from '../review/ReviewReport'
 import { useReviewStatus } from '../review/useReviewStatus'
 import styles from './ReviewPage.module.css'
 
@@ -36,13 +37,19 @@ export function ReviewPage() {
     )
   }
 
+  if (review.status === 'COMPLETED') {
+    return (
+      <div className={`container ${styles.page}`}>
+        <ReviewReport review={review} />
+      </div>
+    )
+  }
+
   return (
     <div className={`container ${styles.page}`}>
       <ReviewHeader repo={review.repo} meta={[review.branch, review.commitSha && shortSha(review.commitSha)]} />
       {error && <InlineError>{error.message} Retrying…</InlineError>}
-      {review.status === 'FAILED' && <ReviewFailed review={review} />}
-      {(review.status === 'QUEUED' || review.status === 'RUNNING') && <ReviewProgress review={review} />}
-      {review.status === 'COMPLETED' && <p>The review is complete.</p>}
+      {review.status === 'FAILED' ? <ReviewFailed review={review} /> : <ReviewProgress review={review} />}
     </div>
   )
 }
