@@ -8,10 +8,22 @@ type Size = 'md' | 'lg'
 interface StyleProps {
   variant?: Variant
   size?: Size
+  /** Ends the button with an arrow in a circle. It is decoration; the name stays the text. */
+  arrow?: boolean
 }
 
-function classes({ variant = 'secondary', size = 'md' }: StyleProps, extra?: string): string {
-  return [styles.button, styles[variant], styles[size], extra].filter(Boolean).join(' ')
+function classes({ variant = 'secondary', size = 'md', arrow = false }: StyleProps, extra?: string): string {
+  return [styles.button, styles[variant], styles[size], arrow && styles.withArrow, extra].filter(Boolean).join(' ')
+}
+
+function Arrow() {
+  return (
+    <span className={styles.arrow} aria-hidden="true">
+      <svg width="16" height="16" viewBox="0 0 16 16">
+        <path d="M5 11L11 5M6 5h5v5" />
+      </svg>
+    </span>
+  )
 }
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement>, StyleProps {
@@ -20,18 +32,26 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement>, StyleProp
   children: ReactNode
 }
 
-export function Button({ variant, size, busy = false, disabled, className, type = 'button', ...rest }: ButtonProps) {
+export function Button({ variant, size, arrow, busy = false, disabled, className, type = 'button', children, ...rest }: ButtonProps) {
   return (
     <button
       type={type}
-      className={classes({ variant, size }, className)}
+      className={classes({ variant, size, arrow }, className)}
       disabled={disabled || busy}
       aria-busy={busy || undefined}
       {...rest}
-    />
+    >
+      {arrow ? <span>{children}</span> : children}
+      {arrow && <Arrow />}
+    </button>
   )
 }
 
-export function ButtonLink({ variant, size, className, ...rest }: LinkProps & StyleProps) {
-  return <Link className={classes({ variant, size }, className as string | undefined)} {...rest} />
+export function ButtonLink({ variant, size, arrow, className, children, ...rest }: LinkProps & StyleProps) {
+  return (
+    <Link className={classes({ variant, size, arrow }, className as string | undefined)} {...rest}>
+      {arrow ? <span>{children as ReactNode}</span> : children}
+      {arrow && <Arrow />}
+    </Link>
+  )
 }

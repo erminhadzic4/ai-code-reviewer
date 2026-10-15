@@ -1,0 +1,42 @@
+.frame {
+  margin: 0;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-frame);
+  background: var(--color-frame);
+}
+
+.body {
+  height: 100%;
+  overflow: hidden;
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-inset-highlight);
+}
+
+.none {
+  padding: 0;
+}
+
+.md {
+  padding: var(--space-5);
+}
+
+.lg {
+  padding: 36px 40px;
+}
+
+@media (max-width: 480px) {
+  .frame {
+    padding: 6px;
+    border-radius: var(--radius-card);
+  }
+
+  .body {
+    border-radius: 18px;
+  }
+
+  .lg {
+    padding: var(--space-5);
+  }
+}
