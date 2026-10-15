@@ -1,7 +1,7 @@
 import type { ReviewStatus } from '../api/types'
 import styles from './StatusMark.module.css'
 
-export const STATUS_LABEL: Record<ReviewStatus, string> = {
+const STATUS_LABEL: Record<ReviewStatus, string> = {
   QUEUED: 'Queued',
   RUNNING: 'Running',
   COMPLETED: 'Completed',
