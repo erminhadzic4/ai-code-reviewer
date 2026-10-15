@@ -5,23 +5,33 @@
   padding-bottom: var(--space-8);
 }
 
+.loading {
+  padding-top: var(--space-8);
+}
+
 .missing {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: var(--space-3);
-  padding-top: var(--space-8);
+  gap: 20px;
+  padding-top: 120px;
 }
 
 .missingTitle {
+  margin-top: var(--space-2);
   font-family: var(--font-display);
-  font-size: var(--text-xl);
-  font-weight: 700;
-  letter-spacing: -0.025em;
+  font-size: clamp(38px, 5vw, var(--text-3xl));
+  font-weight: 600;
+  line-height: 1.03;
+  letter-spacing: -0.035em;
 }
 
 .missingText {
+  max-width: 420px;
+  margin-bottom: 20px;
   color: var(--color-text-muted);
+  font-size: var(--text-lead);
+  line-height: 1.6;
 }
 
 /* While a review runs: its name on the left, the steps on the right. */

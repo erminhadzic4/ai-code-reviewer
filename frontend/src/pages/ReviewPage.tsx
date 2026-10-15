@@ -21,9 +21,10 @@ export function ReviewPage() {
       return (
         <div className={`container ${styles.page}`}>
           <div className={styles.missing}>
+            <Eyebrow>Review</Eyebrow>
             <h1 className={styles.missingTitle}>Review not found</h1>
             <p className={styles.missingText}>It does not exist, or it belongs to another account.</p>
-            <ButtonLink to="/reviews" variant="secondary">
+            <ButtonLink to="/reviews" variant="primary" size="lg" arrow>
               Your reviews
             </ButtonLink>
           </div>
@@ -31,7 +32,7 @@ export function ReviewPage() {
       )
     }
     return (
-      <div className={`container ${styles.page}`}>
+      <div className={`container ${styles.page} ${styles.loading}`}>
         {error && <InlineError>{error.message} Retrying…</InlineError>}
         <Skeleton rows={4} label="Loading the review" />
       </div>

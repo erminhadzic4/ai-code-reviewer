@@ -8,8 +8,8 @@
 .bar {
   display: block;
   height: 14px;
-  border-radius: var(--radius-xs);
-  background: var(--color-surface-raised);
+  border-radius: var(--radius-pill);
+  background: var(--color-fill-hover);
   animation: pulse 1.4s ease-in-out infinite;
 }
 
