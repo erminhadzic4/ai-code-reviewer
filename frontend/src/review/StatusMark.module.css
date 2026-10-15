@@ -1,0 +1,31 @@
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-soft);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+/* Waiting and running are rings, finished ones are filled. */
+.QUEUED .dot {
+  border: 1.5px solid var(--color-text-faint);
+}
+
+.RUNNING .dot {
+  border: 1.5px solid var(--color-text-soft);
+}
+
+.COMPLETED .dot {
+  background: var(--color-good);
+}
+
+.FAILED .dot {
+  background: var(--color-critical-mark);
+}

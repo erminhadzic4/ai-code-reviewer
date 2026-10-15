@@ -1,5 +1,5 @@
 import { startTransition } from 'react'
-import { Link, NavLink, useNavigate } from 'react-router'
+import { NavLink, useNavigate } from 'react-router'
 import { useAuth } from '../auth/AuthContext'
 import styles from './AppHeader.module.css'
 import { Logo } from './Logo'
@@ -36,9 +36,9 @@ export function AppHeader() {
                 <NavLink to="/reviews" end className={linkClass}>
                   Reviews
                 </NavLink>
-                <Link to="/" className={styles.pill}>
+                <NavLink to="/reviews/new" className={pillClass}>
                   New review
-                </Link>
+                </NavLink>
                 <button type="button" className={styles.link} onClick={logOut}>
                   Log out
                 </button>
