@@ -4,6 +4,7 @@ import { AppLayout } from './components/AppLayout'
 import { AuthPage } from './pages/AuthPage'
 import { HistoryPage } from './pages/HistoryPage'
 import { LandingPage } from './pages/LandingPage'
+import { NewReviewPage } from './pages/NewReviewPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { ReviewPage } from './pages/ReviewPage'
 
@@ -19,6 +20,14 @@ function App() {
           element={
             <RequireAuth>
               <HistoryPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="reviews/new"
+          element={
+            <RequireAuth>
+              <NewReviewPage />
             </RequireAuth>
           }
         />

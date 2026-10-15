@@ -1,9 +1,16 @@
 import { startTransition } from 'react'
 import { NavLink, useNavigate } from 'react-router'
 import { useAuth } from '../auth/AuthContext'
-import { Button, ButtonLink } from './Button'
 import styles from './AppHeader.module.css'
 import { Logo } from './Logo'
+
+function linkClass({ isActive }: { isActive: boolean }): string {
+  return isActive ? `${styles.link} ${styles.active}` : styles.link
+}
+
+function pillClass({ isActive }: { isActive: boolean }): string {
+  return isActive ? `${styles.pill} ${styles.pillActive}` : styles.pill
+}
 
 export function AppHeader() {
   const { state, signOut } = useAuth()
@@ -20,30 +27,30 @@ export function AppHeader() {
 
   return (
     <header className={styles.header}>
-      <div className={styles.inner}>
+      <div className={styles.bar}>
         <Logo />
         {state.status !== 'loading' && (
           <nav aria-label="Main" className={styles.nav}>
             {state.status === 'signedIn' ? (
               <>
-                <NavLink to="/reviews" end className={({ isActive }) => (isActive ? styles.linkActive : styles.link)}>
+                <NavLink to="/reviews" end className={linkClass}>
                   Reviews
                 </NavLink>
-                <ButtonLink to="/" variant="secondary">
+                <NavLink to="/reviews/new" className={pillClass}>
                   New review
-                </ButtonLink>
-                <Button variant="text" onClick={logOut}>
+                </NavLink>
+                <button type="button" className={styles.link} onClick={logOut}>
                   Log out
-                </Button>
+                </button>
               </>
             ) : (
               <>
-                <NavLink to="/login" className={({ isActive }) => (isActive ? styles.linkActive : styles.link)}>
+                <NavLink to="/login" className={linkClass}>
                   Log in
                 </NavLink>
-                <ButtonLink to="/register" variant="secondary">
+                <NavLink to="/register" className={pillClass}>
                   Sign up
-                </ButtonLink>
+                </NavLink>
               </>
             )}
           </nav>

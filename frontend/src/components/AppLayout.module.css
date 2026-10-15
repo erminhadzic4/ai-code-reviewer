@@ -1,0 +1,38 @@
+/* The page background and its two soft glows. The glows are pseudo-elements, so they add
+   nothing to the document. clip cuts them off on both axes, so a short page does not grow to
+   fit them; unlike hidden it makes no scroll container, which would break position: sticky. */
+.shell {
+  position: relative;
+  isolation: isolate;
+  min-height: 100dvh;
+  overflow: clip;
+  background: var(--gradient-page);
+}
+
+.shell::before,
+.shell::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.shell::before {
+  top: -260px;
+  right: -200px;
+  width: 900px;
+  height: 900px;
+  background: var(--glow-accent);
+}
+
+.shell::after {
+  top: 520px;
+  left: -320px;
+  width: 880px;
+  height: 880px;
+  background: var(--glow-cool);
+}
+
+.main {
+  position: relative;
+}

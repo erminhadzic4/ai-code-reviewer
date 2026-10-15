@@ -2,8 +2,8 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  font-size: var(--text-sm);
-  font-weight: 600;
+  font-size: var(--text-xs);
+  font-weight: 500;
   white-space: nowrap;
 }
 
@@ -16,6 +16,15 @@
 
 .CRITICAL {
   color: var(--color-critical);
+}
+
+/* The marks of two levels are a shade deeper than their text. */
+.CRITICAL .square {
+  background: var(--color-critical-mark);
+}
+
+.SMELL .square {
+  background: var(--color-smell-mark);
 }
 
 .WARNING {

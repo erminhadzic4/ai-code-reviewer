@@ -26,6 +26,11 @@ Scope for now: runs locally. Public deployment is a later option (see "Later").
 - [x] M7 Frontend, following the approved frontend design mockup (dark theme: landing page
       and review report): login/register, submit form, progress screen, report dashboard,
       issue list with filters and diff-style suggestions
+- [x] M7.5 Frontend redesign: restyle the frontend to the second approved design (dark gradient
+      background, floating pill navigation, framed cards, interactive 3D preview on a new review
+      screen). Visual changes and one new screen; routes, API calls, polling and auth behavior
+      stay as they are, existing tests stay green, accessibility is kept (focus ring, skip link,
+      reduced motion)
 - [ ] M8 Polish: Swagger, one-command local run (docker-compose, `.env.example`),
       error states, demo GIF, README, tag `v1.0`
 

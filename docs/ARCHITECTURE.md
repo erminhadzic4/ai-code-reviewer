@@ -618,15 +618,20 @@ The `db` service and `.env.example` arrived in M1 with the first table; the `bac
 
 ## 7. Frontend notes
 
-The frontend follows the approved frontend design mockup (dark theme: landing page and
-review report), made denser for a tool that shows many findings. Colours, fonts, spacing,
-radii, layers and motion live in one file of CSS variables
-(`frontend/src/styles/tokens.css`); components use CSS modules. The three font families
-are served from `frontend/public/fonts` (SIL Open Font License).
+The frontend follows the second approved design (M7.5): a dark gradient background, a
+floating pill navigation, framed cards and pill-shaped controls, with the report kept as
+dense rows grouped by file. Colours, gradients, shadows, fonts, spacing, radii, layers and
+motion live in one file of CSS variables with semantic names
+(`frontend/src/styles/tokens.css`); components use CSS modules. Patterns that repeat on
+every screen are components: `Panel` (a translucent frame around a dark panel), `Eyebrow`
+(the label above a title), `StatusMark` (the status of a review) and `Button` with an
+optional arrow. The three font families are served from `frontend/public/fonts` (SIL Open
+Font License).
 
 Routes (`react-router`): `/` landing, `/login`, `/register`, `/reviews` history,
-`/reviews/:id` one review, anything else a not-found page. Both review routes need a
-signed-in user. `/reviews/:id` shows whatever the status says: progress while the review
+`/reviews/new` the form for a new review, `/reviews/:id` one review, anything else a
+not-found page. The three review routes need a signed-in user; the static `new` segment
+ranks before `:id`, so it is never read as a review id. `/reviews/:id` shows whatever the status says: progress while the review
 is queued or running, the failure, or the report.
 
 - `src/api/client.ts` adds the stored token to every request and turns problem details
@@ -642,6 +647,16 @@ is queued or running, the failure, or the report.
   they follow their lines. The report's filters (all, critical, warnings, smells) work on
   data already in the browser and carry the counters.
 - The diff view numbers old and new lines in separate columns (`src/review/diff.ts`).
+- The new review screen shows the same form as the landing page, the three latest reviews
+  (the history endpoint with `size=3`; the list is left out if it cannot be loaded) and an
+  interactive example of a report (`src/review/ReviewPreview.tsx`). The example is four
+  cards in CSS 3D space: the scene tilts with the pointer, and a click brings one card
+  forward. The pointer position is written to two CSS variables, not React state, so a
+  move does not re-render. Below 720 px, without a mouse and with reduced motion, the
+  scene does not tilt; on narrow screens the cards become a flat list.
+- Motion is limited to hover colours, a press on buttons, the arrow in primary buttons,
+  the progress bar and the example report. Under `prefers-reduced-motion` all
+  transitions and animations stop.
 - Text from the model is always rendered as text, never as HTML.
 
 Out of scope for V1: exporting a report (planned for V2), dismissing individual findings

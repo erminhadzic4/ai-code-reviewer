@@ -5,9 +5,9 @@ import styles from './Logo.module.css'
 export function Logo() {
   return (
     <Link to="/" className={styles.logo}>
-      <svg width="26" height="26" viewBox="0 0 28 28" aria-hidden="true" className={styles.mark}>
-        <circle cx="10" cy="14" r="7" className={styles.ringAccent} />
-        <circle cx="18" cy="14" r="7" className={styles.ring} />
+      <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" className={styles.mark}>
+        <circle cx="9" cy="12" r="6.5" className={styles.ringFront} />
+        <circle cx="15" cy="12" r="6.5" className={styles.ringBack} />
       </svg>
       Second Pair
     </Link>

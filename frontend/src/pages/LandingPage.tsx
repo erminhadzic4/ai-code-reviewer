@@ -1,34 +1,14 @@
 import { useLocation } from 'react-router'
-import type { Finding } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
 import type { LoginRedirectState } from '../auth/RequireAuth'
+import { Eyebrow } from '../components/Eyebrow'
+import { Panel } from '../components/Panel'
 import { SeverityMark } from '../components/SeverityMark'
 import { buildDiff } from '../review/diff'
 import { DiffView } from '../review/DiffView'
+import { EXAMPLE_FINDING } from '../review/example'
 import { RepoUrlForm } from '../review/RepoUrlForm'
 import styles from './LandingPage.module.css'
-
-// A finding in the shape the backend returns, shown as an example of a report.
-const EXAMPLE: Finding = {
-  id: 0,
-  level: 'CRITICAL',
-  category: 'SECURITY',
-  severity: 'CRITICAL',
-  filePath: 'src/main/java/shop/UserRepository.java',
-  lineStart: 42,
-  lineEnd: 43,
-  title: 'SQL query built from user input',
-  explanation: 'The username goes straight into the query string.',
-  suggestion: 'Use a parameterized query.',
-  suggestedCode: '    String q = "SELECT * FROM users WHERE name = ?";\n    return jdbc.queryForObject(q, mapper, username);',
-  codeSnippet: [
-    '  public User find(String username) {',
-    '    String q = "SELECT * FROM users WHERE name=\'" + username + "\'";',
-    '    return jdbc.queryForObject(q, mapper);',
-    '  }',
-  ].join('\n'),
-  snippetStartLine: 41,
-}
 
 const STEPS = [
   {
@@ -54,6 +34,7 @@ export function LandingPage() {
     <>
       <section className={`container ${styles.hero}`} aria-labelledby="hero-title">
         <div className={styles.pitch}>
+          <Eyebrow>Public repositories</Eyebrow>
           <h1 id="hero-title" className={styles.title}>
             Paste a repo.
             <br />
@@ -70,32 +51,41 @@ export function LandingPage() {
           </p>
         </div>
 
-        <figure className={styles.example} aria-label="Example finding">
+        <Panel as="figure" padding="none" aria-label="Example finding">
           <figcaption className={styles.exampleHead}>
             <span className={styles.exampleTag}>Example</span>
-            <SeverityMark level={EXAMPLE.level} />
             <span className={styles.exampleLocation}>UserRepository.java:42–43</span>
           </figcaption>
-          <p className={styles.exampleTitle}>{EXAMPLE.title}</p>
-          <p className={styles.exampleText}>
-            Anyone can inject SQL through the username. Use a parameterized query instead.
-          </p>
-          <DiffView rows={buildDiff(EXAMPLE)} label="Suggested change to UserRepository.java" />
-        </figure>
+          <div className={styles.exampleBody}>
+            <SeverityMark level={EXAMPLE_FINDING.level} />
+            <p className={styles.exampleTitle}>{EXAMPLE_FINDING.title}</p>
+            <p className={styles.exampleText}>
+              Anyone can inject SQL through the username. Use a parameterized query instead.
+            </p>
+          </div>
+          <div className={styles.exampleDiff}>
+            <DiffView rows={buildDiff(EXAMPLE_FINDING)} label="Suggested change to UserRepository.java" />
+          </div>
+        </Panel>
       </section>
 
       <section className={`container ${styles.how}`} aria-labelledby="how-title">
         <h2 id="how-title" className={styles.howTitle}>
           How it works
         </h2>
-        <dl className={styles.steps}>
-          {STEPS.map((step) => (
-            <div key={step.term} className={styles.step}>
-              <dt className={styles.stepTerm}>{step.term}</dt>
-              <dd className={styles.stepText}>{step.text}</dd>
-            </div>
+        <ol className={styles.steps}>
+          {STEPS.map((step, i) => (
+            <li key={step.term} className={styles.step}>
+              <Panel padding="lg" className={styles.stepFrame} bodyClassName={styles.stepBody}>
+                <span className={styles.stepNumber} aria-hidden="true">
+                  {String(i + 1).padStart(2, '0')}
+                </span>
+                <h3 className={styles.stepTerm}>{step.term}</h3>
+                <p className={styles.stepText}>{step.text}</p>
+              </Panel>
+            </li>
           ))}
-        </dl>
+        </ol>
       </section>
 
       <footer className={`container ${styles.footer}`}>

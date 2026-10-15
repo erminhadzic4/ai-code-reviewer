@@ -1,6 +1,7 @@
 import type { ReviewStatusResponse } from '../api/types'
 import { Button, ButtonLink } from '../components/Button'
 import { InlineError } from '../components/InlineError'
+import { Panel } from '../components/Panel'
 import { adviceFor } from './errorActions'
 import styles from './ReviewFailed.module.css'
 import { useResubmit } from './useResubmit'
@@ -11,19 +12,25 @@ export function ReviewFailed({ review }: { review: ReviewStatusResponse }) {
   const advice = adviceFor(code)
 
   return (
-    <section className={styles.panel} aria-labelledby="failed-title">
+    <Panel as="section" padding="none" className={styles.frame} bodyClassName={styles.panel} aria-labelledby="failed-title">
+      <p className={styles.top}>
+        <span className={styles.status}>
+          <span className={styles.square} aria-hidden="true" />
+          Failed
+        </span>
+        <span className={styles.code}>
+          {code} · attempt {review.attempt} of {review.maxAttempts}
+        </span>
+      </p>
       <h2 id="failed-title" className={styles.title}>
         The review failed
       </h2>
       <p className={styles.message}>{review.error?.message ?? 'The review stopped without a reason.'}</p>
       {advice.hint && <p className={styles.hint}>{advice.hint}</p>}
-      <p className={styles.code}>
-        {code} · attempt {review.attempt} of {review.maxAttempts}
-      </p>
       <div className={styles.actions}>
         {advice.canRetry ? (
           <>
-            <Button variant="primary" busy={busy} onClick={resubmit}>
+            <Button variant="primary" size="lg" arrow busy={busy} onClick={resubmit}>
               {busy ? 'Submitting…' : 'Try again'}
             </Button>
             <ButtonLink to="/" variant="text">
@@ -31,12 +38,12 @@ export function ReviewFailed({ review }: { review: ReviewStatusResponse }) {
             </ButtonLink>
           </>
         ) : (
-          <ButtonLink to="/" variant="primary">
+          <ButtonLink to="/" variant="primary" size="lg" arrow>
             Review another repository
           </ButtonLink>
         )}
       </div>
       {error && <InlineError>{error}</InlineError>}
-    </section>
+    </Panel>
   )
 }

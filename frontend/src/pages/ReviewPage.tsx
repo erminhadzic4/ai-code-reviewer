@@ -1,5 +1,6 @@
 import { useParams } from 'react-router'
 import { ButtonLink } from '../components/Button'
+import { Eyebrow } from '../components/Eyebrow'
 import { InlineError } from '../components/InlineError'
 import { Skeleton } from '../components/Skeleton'
 import { shortSha } from '../review/format'
@@ -20,9 +21,10 @@ export function ReviewPage() {
       return (
         <div className={`container ${styles.page}`}>
           <div className={styles.missing}>
+            <Eyebrow>Review</Eyebrow>
             <h1 className={styles.missingTitle}>Review not found</h1>
             <p className={styles.missingText}>It does not exist, or it belongs to another account.</p>
-            <ButtonLink to="/reviews" variant="secondary">
+            <ButtonLink to="/reviews" variant="primary" size="lg" arrow>
               Your reviews
             </ButtonLink>
           </div>
@@ -30,7 +32,7 @@ export function ReviewPage() {
       )
     }
     return (
-      <div className={`container ${styles.page}`}>
+      <div className={`container ${styles.page} ${styles.loading}`}>
         {error && <InlineError>{error.message} Retrying…</InlineError>}
         <Skeleton rows={4} label="Loading the review" />
       </div>
@@ -45,11 +47,28 @@ export function ReviewPage() {
     )
   }
 
+  const header = <ReviewHeader repo={review.repo} meta={[review.branch, review.commitSha && shortSha(review.commitSha)]} />
+  const retrying = error && <InlineError>{error.message} Retrying…</InlineError>
+
+  if (review.status === 'FAILED') {
+    return (
+      <div className={`container ${styles.page}`}>
+        {header}
+        {retrying}
+        <ReviewFailed review={review} />
+      </div>
+    )
+  }
+
   return (
-    <div className={`container ${styles.page}`}>
-      <ReviewHeader repo={review.repo} meta={[review.branch, review.commitSha && shortSha(review.commitSha)]} />
-      {error && <InlineError>{error.message} Retrying…</InlineError>}
-      {review.status === 'FAILED' ? <ReviewFailed review={review} /> : <ReviewProgress review={review} />}
+    <div className={`container ${styles.progress}`}>
+      <div className={styles.intro}>
+        <Eyebrow>Review in progress</Eyebrow>
+        {header}
+        <p className={styles.note}>You can leave this page; the review keeps running and stays in your list.</p>
+        {retrying}
+      </div>
+      <ReviewProgress review={review} />
     </div>
   )
 }

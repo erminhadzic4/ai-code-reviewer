@@ -51,27 +51,29 @@ export function RepoUrlForm({ initialUrl = '', autoFocus = false }: Props) {
 
   return (
     <form className={styles.form} onSubmit={onSubmit} noValidate>
-      <div className={styles.row}>
-        <label htmlFor={`${errorId}-url`} className="visually-hidden">
-          GitHub repository URL
-        </label>
-        <input
-          id={`${errorId}-url`}
-          className={styles.input}
-          type="url"
-          inputMode="url"
-          autoComplete="off"
-          spellCheck={false}
-          placeholder="https://github.com/owner/repository"
-          value={url}
-          onChange={(event) => setUrl(event.target.value)}
-          aria-invalid={error ? true : undefined}
-          aria-describedby={error ? errorId : undefined}
-          autoFocus={autoFocus}
-        />
-        <Button type="submit" variant="primary" size="lg" busy={busy}>
-          {busy ? 'Submitting…' : 'Review repository'}
-        </Button>
+      <div className={error ? `${styles.frame} ${styles.invalid}` : styles.frame}>
+        <div className={styles.row}>
+          <label htmlFor={`${errorId}-url`} className="visually-hidden">
+            GitHub repository URL
+          </label>
+          <input
+            id={`${errorId}-url`}
+            className={styles.input}
+            type="url"
+            inputMode="url"
+            autoComplete="off"
+            spellCheck={false}
+            placeholder="https://github.com/owner/repository"
+            value={url}
+            onChange={(event) => setUrl(event.target.value)}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? errorId : undefined}
+            autoFocus={autoFocus}
+          />
+          <Button type="submit" variant="primary" arrow busy={busy} className={styles.submit}>
+            {busy ? 'Submitting…' : 'Review repository'}
+          </Button>
+        </div>
       </div>
       {error && <InlineError id={errorId}>{error}</InlineError>}
     </form>

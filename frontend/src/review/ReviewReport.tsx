@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { ApiError } from '../api/client'
 import { getReviewResult } from '../api/reviews'
 import type { ReviewResult, ReviewStatusResponse } from '../api/types'
-import { Button } from '../components/Button'
+import { Button, ButtonLink } from '../components/Button'
 import { InlineError } from '../components/InlineError'
 import { Skeleton } from '../components/Skeleton'
 import { applyFilter, groupByFile, type FileGroup, type Filter } from './findings'
@@ -72,9 +72,14 @@ export function ReviewReport({ review }: { review: ReviewStatusResponse }) {
         repo={review.repo}
         meta={meta}
         actions={
-          <Button variant="secondary" busy={busy} onClick={resubmit}>
-            {busy ? 'Submitting…' : 'Review again'}
-          </Button>
+          <>
+            <Button variant="secondary" busy={busy} onClick={resubmit}>
+              {busy ? 'Submitting…' : 'Review again'}
+            </Button>
+            <ButtonLink to="/reviews/new" variant="text">
+              New review
+            </ButtonLink>
+          </>
         }
       />
       {resubmitError && <InlineError>{resubmitError}</InlineError>}
@@ -181,15 +186,17 @@ function Report({ result }: { result: ReviewResult }) {
             <div className={styles.groups}>
               {visible.map((group, i) => (
                 <section key={group.filePath ?? '(repository)'} id={`file-${i}`} className={styles.group} aria-labelledby={`file-${i}-title`}>
-                  <h3 id={`file-${i}-title`} className={styles.groupTitle}>
-                    <span className={styles.path}>{group.filePath ?? 'Repository-wide'}</span>
-                    <span className={styles.groupCount}>{plural(group.findings.length, 'finding')}</span>
-                  </h3>
-                  <ul className={styles.rows}>
-                    {group.findings.map((finding) => (
-                      <FindingRow key={finding.id} finding={finding} open={openIds.has(finding.id)} onToggle={() => toggle(finding.id)} />
-                    ))}
-                  </ul>
+                  <div className={styles.groupBody}>
+                    <h3 id={`file-${i}-title`} className={styles.groupTitle}>
+                      <span className={styles.path}>{group.filePath ?? 'Repository-wide'}</span>
+                      <span className={styles.groupCount}>{plural(group.findings.length, 'finding')}</span>
+                    </h3>
+                    <ul className={styles.rows}>
+                      {group.findings.map((finding) => (
+                        <FindingRow key={finding.id} finding={finding} open={openIds.has(finding.id)} onToggle={() => toggle(finding.id)} />
+                      ))}
+                    </ul>
+                  </div>
                 </section>
               ))}
               {shown < total && (
