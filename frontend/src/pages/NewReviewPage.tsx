@@ -43,14 +43,16 @@ export function NewReviewPage() {
                   <Link to={`/reviews/${review.id}`} className={styles.recentRow}>
                     <span className={styles.recentRepo}>{review.repo}</span>
                     {review.commitSha && <span className={styles.recentSha}>{shortSha(review.commitSha)}</span>}
-                    {review.overallScore !== null ? (
-                      <span className={styles.recentScore}>
-                        {review.overallScore}
-                        <span className="visually-hidden"> out of 100</span>
-                      </span>
-                    ) : (
-                      <StatusMark status={review.status} />
-                    )}
+                    <span className={styles.recentState}>
+                      {review.overallScore !== null ? (
+                        <span className={styles.recentScore}>
+                          {review.overallScore}
+                          <span className="visually-hidden"> out of 100</span>
+                        </span>
+                      ) : (
+                        <StatusMark status={review.status} />
+                      )}
+                    </span>
                     <svg className={styles.arrow} width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
                       <path d="M3 8h10M9 4l4 4-4 4" />
                     </svg>

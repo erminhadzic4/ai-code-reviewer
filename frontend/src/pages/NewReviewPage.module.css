@@ -110,12 +110,17 @@
   font-size: var(--text-xs);
 }
 
+/* Score or status share one column, so the commits above each other line up. */
+.recentState {
+  display: flex;
+  flex: 0 0 96px;
+  justify-content: flex-end;
+}
+
 .recentScore {
-  flex: 0 0 32px;
   font-family: var(--font-mono);
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
-  text-align: right;
 }
 
 .arrow {
@@ -144,6 +149,13 @@
     gap: var(--space-7);
     padding-top: var(--space-8);
     padding-bottom: var(--space-8);
+  }
+
+  /* The preview keeps the width it was drawn for. */
+  .page > :last-child {
+    justify-self: center;
+    width: 100%;
+    max-width: 560px;
   }
 }
 
