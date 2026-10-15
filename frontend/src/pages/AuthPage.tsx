@@ -5,7 +5,9 @@ import { ApiError } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import type { LoginRedirectState } from '../auth/RequireAuth'
 import { Button } from '../components/Button'
+import { Eyebrow } from '../components/Eyebrow'
 import { InlineError } from '../components/InlineError'
+import { Panel } from '../components/Panel'
 import styles from './AuthPage.module.css'
 
 type Mode = 'login' | 'register'
@@ -13,6 +15,7 @@ type Mode = 'login' | 'register'
 const TEXT = {
   login: {
     title: 'Log in',
+    lead: 'Log in to keep your reviews and open them again later.',
     submit: 'Log in',
     busy: 'Logging in…',
     switchText: 'No account yet?',
@@ -21,6 +24,7 @@ const TEXT = {
   },
   register: {
     title: 'Create an account',
+    lead: 'An account keeps your reviews, so you can open them again later.',
     submit: 'Create account',
     busy: 'Creating account…',
     switchText: 'Already have an account?',
@@ -88,41 +92,47 @@ export function AuthPage({ mode }: { mode: Mode }) {
 
   return (
     <div className={`container ${styles.page}`}>
-      <h1 className={styles.title}>{text.title}</h1>
-      {redirect.repoUrl && <p className={styles.context}>Sign in to review {redirect.repoUrl}.</p>}
-      <form className={styles.form} onSubmit={onSubmit} noValidate>
-        {formError && <InlineError>{formError}</InlineError>}
-        {(['email', 'password'] as const).map((field) => (
-          <div key={field} className={styles.field}>
-            <label htmlFor={`${id}-${field}`} className={styles.label}>
-              {FIELD_NAME[field]}
-            </label>
-            <input
-              id={`${id}-${field}`}
-              className={styles.input}
-              type={field === 'email' ? 'email' : 'password'}
-              autoComplete={field === 'email' ? 'email' : mode === 'login' ? 'current-password' : 'new-password'}
-              value={field === 'email' ? email : password}
-              onChange={(event) => (field === 'email' ? setEmail : setPassword)(event.target.value)}
-              aria-invalid={fieldErrors[field] ? true : undefined}
-              aria-describedby={fieldErrors[field] ? `${id}-${field}-error` : undefined}
-            />
-            {mode === 'register' && field === 'password' && !fieldErrors.password && (
-              <p className={styles.hint}>At least 8 characters.</p>
-            )}
-            {fieldErrors[field] && <InlineError id={`${id}-${field}-error`}>{fieldErrors[field]}</InlineError>}
-          </div>
-        ))}
-        <Button type="submit" variant="primary" size="lg" busy={busy} className={styles.submit}>
-          {busy ? text.busy : text.submit}
-        </Button>
-      </form>
-      <p className={styles.switch}>
-        {text.switchText}{' '}
-        <Link to={text.switchTo} state={redirect} className={styles.switchLink}>
-          {text.switchLink}
-        </Link>
-      </p>
+      <div className={styles.intro}>
+        <Eyebrow>Your account</Eyebrow>
+        <h1 className={styles.title}>{text.title}</h1>
+        <p className={styles.lead}>{text.lead}</p>
+        {redirect.repoUrl && <p className={styles.context}>Sign in to review {redirect.repoUrl}.</p>}
+      </div>
+      <Panel padding="lg" className={styles.card}>
+        <form className={styles.form} onSubmit={onSubmit} noValidate>
+          {formError && <InlineError>{formError}</InlineError>}
+          {(['email', 'password'] as const).map((field) => (
+            <div key={field} className={styles.field}>
+              <label htmlFor={`${id}-${field}`} className={styles.label}>
+                {FIELD_NAME[field]}
+              </label>
+              <input
+                id={`${id}-${field}`}
+                className={styles.input}
+                type={field === 'email' ? 'email' : 'password'}
+                autoComplete={field === 'email' ? 'email' : mode === 'login' ? 'current-password' : 'new-password'}
+                value={field === 'email' ? email : password}
+                onChange={(event) => (field === 'email' ? setEmail : setPassword)(event.target.value)}
+                aria-invalid={fieldErrors[field] ? true : undefined}
+                aria-describedby={fieldErrors[field] ? `${id}-${field}-error` : undefined}
+              />
+              {mode === 'register' && field === 'password' && !fieldErrors.password && (
+                <p className={styles.hint}>At least 8 characters.</p>
+              )}
+              {fieldErrors[field] && <InlineError id={`${id}-${field}-error`}>{fieldErrors[field]}</InlineError>}
+            </div>
+          ))}
+          <Button type="submit" variant="primary" size="lg" arrow busy={busy} className={styles.submit}>
+            {busy ? text.busy : text.submit}
+          </Button>
+        </form>
+        <p className={styles.switch}>
+          {text.switchText}{' '}
+          <Link to={text.switchTo} state={redirect} className={styles.switchLink}>
+            {text.switchLink}
+          </Link>
+        </p>
+      </Panel>
     </div>
   )
 }
