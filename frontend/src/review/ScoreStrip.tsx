@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react'
 import type { ReviewResult } from '../api/types'
+import { Panel } from '../components/Panel'
 import styles from './ScoreStrip.module.css'
 import { verdict } from './verdict'
 
@@ -13,7 +14,7 @@ const SUB_SCORES = [
 export function ScoreStrip({ result }: { result: ReviewResult }) {
   const { headline, detail } = verdict(result)
   return (
-    <section className={styles.strip} aria-label="Scores">
+    <Panel as="section" padding="lg" bodyClassName={styles.strip} aria-label="Scores">
       <div className={styles.overall}>
         <p className={styles.score}>
           <span className={styles.number}>{result.scores.overall}</span>
@@ -36,6 +37,6 @@ export function ScoreStrip({ result }: { result: ReviewResult }) {
           </div>
         ))}
       </dl>
-    </section>
+    </Panel>
   )
 }

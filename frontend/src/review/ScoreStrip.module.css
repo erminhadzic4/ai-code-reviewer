@@ -1,38 +1,33 @@
 .strip {
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
   align-items: center;
-  gap: var(--space-5) var(--space-7);
-  padding: var(--space-5);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
+  gap: 40px 64px;
 }
 
 .overall {
   display: flex;
-  align-items: center;
-  gap: var(--space-5);
+  flex-direction: column;
+  gap: 14px;
 }
 
 .score {
   display: flex;
   align-items: baseline;
-  flex: none;
+  gap: 10px;
 }
 
 .number {
   font-family: var(--font-display);
-  font-size: var(--text-3xl);
-  font-weight: 700;
+  font-size: 88px;
+  font-weight: 600;
   line-height: 1;
   letter-spacing: -0.04em;
   font-variant-numeric: tabular-nums;
 }
 
 .outOf {
-  margin-left: var(--space-1);
-  color: var(--color-text-muted);
+  color: var(--color-text-faint);
   font-family: var(--font-mono);
   font-size: var(--text-md);
 }
@@ -47,50 +42,54 @@
 
 .detail {
   margin-top: var(--space-1);
-  color: var(--color-text-muted);
+  color: var(--color-text-soft);
+  font-size: 15px;
 }
 
 .subScores {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: 18px;
   margin: 0;
 }
 
+/* Label, bar and value on one line. */
 .subScore {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-areas:
-    'label value'
-    'track track';
-  row-gap: var(--space-1);
+  grid-template-columns: 120px minmax(0, 1fr) 32px;
+  grid-template-areas: 'label track value';
+  align-items: center;
+  column-gap: var(--space-4);
 }
 
 .subLabel {
   grid-area: label;
-  font-size: var(--text-md);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
 }
 
 .subValue {
   grid-area: value;
   margin: 0;
   font-family: var(--font-mono);
-  font-size: var(--text-md);
+  font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .track {
   grid-area: track;
   height: 4px;
   margin: 0;
-  border-radius: 2px;
-  background: var(--color-meter-track);
   overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--color-meter-track);
 }
 
 .fill {
   display: block;
   height: 100%;
+  border-radius: var(--radius-pill);
   background: var(--color-meter);
   transform: scaleX(var(--fraction));
   transform-origin: left;
@@ -99,5 +98,14 @@
 @media (max-width: 760px) {
   .strip {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .number {
+    font-size: 72px;
+  }
+
+  .subScore {
+    grid-template-columns: 112px minmax(0, 1fr) 32px;
+    column-gap: var(--space-3);
   }
 }
