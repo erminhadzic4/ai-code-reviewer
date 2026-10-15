@@ -1,4 +1,4 @@
-import type { Finding } from '../api/types'
+import type { Finding, ReviewResult } from '../api/types'
 
 /** A finding in the shape the backend returns, shown wherever the app explains what a report looks like. */
 export const EXAMPLE_FINDING: Finding = {
@@ -20,4 +20,10 @@ export const EXAMPLE_FINDING: Finding = {
     '  }',
   ].join('\n'),
   snippetStartLine: 41,
+}
+
+/** Scores and counters to go with the example finding. */
+export const EXAMPLE_SCORES: Pick<ReviewResult, 'scores' | 'counts'> = {
+  scores: { overall: 82, security: 64, maintainability: 88, performance: 76 },
+  counts: { critical: 1, warnings: 3, codeSmells: 3, goodPractices: 2 },
 }
