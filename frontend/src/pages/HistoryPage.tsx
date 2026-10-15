@@ -2,22 +2,17 @@ import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { ApiError } from '../api/client'
 import { getReviewHistory } from '../api/reviews'
-import type { Page, ReviewStatus, ReviewSummary } from '../api/types'
+import type { Page, ReviewSummary } from '../api/types'
 import { Button } from '../components/Button'
 import { InlineError } from '../components/InlineError'
+import { Panel } from '../components/Panel'
 import { Skeleton } from '../components/Skeleton'
 import { formatAgo, shortSha } from '../review/format'
 import { RepoUrlForm } from '../review/RepoUrlForm'
+import { StatusMark } from '../review/StatusMark'
 import styles from './HistoryPage.module.css'
 
 export const PAGE_SIZE = 20
-
-const STATUS_LABEL: Record<ReviewStatus, string> = {
-  QUEUED: 'Queued',
-  RUNNING: 'Running',
-  COMPLETED: 'Completed',
-  FAILED: 'Failed',
-}
 
 /** The user's reviews, newest first. The page number in the address starts at 1. */
 export function HistoryPage() {
@@ -79,43 +74,42 @@ export function HistoryPage() {
 
       {page && page.items.length > 0 && (
         <>
-          <div className={styles.tableWrap}>
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th scope="col">Repository</th>
-                  <th scope="col">Commit</th>
-                  <th scope="col">Status</th>
-                  <th scope="col" className={styles.number}>
-                    Score
-                  </th>
-                  <th scope="col">Submitted</th>
-                </tr>
-              </thead>
-              <tbody>
-                {page.items.map((review) => (
-                  <tr key={review.id}>
-                    <td>
-                      <Link to={`/reviews/${review.id}`} className={styles.repo}>
-                        {review.repo}
-                      </Link>
-                    </td>
-                    <td className={styles.mono}>{review.commitSha ? shortSha(review.commitSha) : '–'}</td>
-                    <td>
-                      <span className={`${styles.status} ${styles[review.status]}`}>
-                        <span className={styles.square} aria-hidden="true" />
-                        {STATUS_LABEL[review.status]}
-                      </span>
-                    </td>
-                    <td className={`${styles.number} ${styles.mono}`}>{review.overallScore ?? '–'}</td>
-                    <td className={styles.muted}>
-                      <time dateTime={review.createdAt}>{formatAgo(review.createdAt)}</time>
-                    </td>
+          <Panel padding="none">
+            <div className={styles.tableWrap}>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th scope="col">Repository</th>
+                    <th scope="col">Commit</th>
+                    <th scope="col">Status</th>
+                    <th scope="col" className={styles.number}>
+                      Score
+                    </th>
+                    <th scope="col">Submitted</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {page.items.map((review) => (
+                    <tr key={review.id}>
+                      <td>
+                        <Link to={`/reviews/${review.id}`} className={styles.repo}>
+                          {review.repo}
+                        </Link>
+                      </td>
+                      <td className={styles.mono}>{review.commitSha ? shortSha(review.commitSha) : '–'}</td>
+                      <td>
+                        <StatusMark status={review.status} />
+                      </td>
+                      <td className={`${styles.number} ${styles.mono}`}>{review.overallScore ?? '–'}</td>
+                      <td className={styles.muted}>
+                        <time dateTime={review.createdAt}>{formatAgo(review.createdAt)}</time>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Panel>
 
           {pages > 1 && (
             <nav className={styles.pager} aria-label="Pages">
