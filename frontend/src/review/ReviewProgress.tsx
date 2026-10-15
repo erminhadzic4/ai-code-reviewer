@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react'
 import type { ReviewStatusResponse } from '../api/types'
+import { Panel } from '../components/Panel'
 import { formatTime } from './format'
 import styles from './ReviewProgress.module.css'
 
@@ -44,52 +45,69 @@ function describeProgress(review: ReviewStatusResponse): string {
   }
 }
 
+/**
+ * The steps of a running review. The sentence on top stays in one place, so a screen reader
+ * announces each change; a live region that moved from step to step would be remounted.
+ */
 export function ReviewProgress({ review }: { review: ReviewStatusResponse }) {
   const current = stepIndex(review)
   const analysing = review.status === 'RUNNING' && review.stage === 'ANALYZING' && review.chunksTotal > 0
   const fraction = analysing ? review.chunksDone / review.chunksTotal : 0
 
   return (
-    <section className={styles.panel} aria-labelledby="progress-title">
+    <Panel as="section" padding="none" bodyClassName={styles.panel} aria-labelledby="progress-title">
       <h2 id="progress-title" className="visually-hidden">
         Progress
       </h2>
-      <ol className={styles.steps}>
-        {STEPS.map((step, i) => {
-          const state = i < current ? 'done' : i === current ? 'current' : 'pending'
-          return (
-            <li key={step} className={`${styles.step} ${styles[state]}`} aria-current={state === 'current' ? 'step' : undefined}>
-              <span className={styles.stepIndex} aria-hidden="true">
-                {i + 1}
-              </span>
-              {step}
-              {state === 'done' && <span className="visually-hidden"> (done)</span>}
-            </li>
-          )
-        })}
-      </ol>
-
       <p className={styles.sentence} aria-live="polite">
         {describeProgress(review)}
       </p>
 
-      {analysing && (
-        <div className={styles.meter}>
-          <div
-            className={styles.track}
-            role="progressbar"
-            aria-label="Parts reviewed"
-            aria-valuemin={0}
-            aria-valuemax={review.chunksTotal}
-            aria-valuenow={review.chunksDone}
-          >
-            <div className={styles.fill} style={{ '--fraction': fraction } as CSSProperties} />
-          </div>
-          <span className={styles.meterText}>
-            {review.chunksDone} of {review.chunksTotal} parts
-          </span>
-        </div>
-      )}
+      <ol className={styles.steps}>
+        {STEPS.map((step, i) => {
+          const state = i < current ? 'done' : i === current ? 'current' : 'pending'
+          const measured = analysing && state === 'current'
+          return (
+            <li key={step} className={`${styles.step} ${styles[state]}`} aria-current={state === 'current' ? 'step' : undefined}>
+              <span className={styles.stepRow}>
+                <span className={styles.marker} aria-hidden="true">
+                  {state === 'done' ? (
+                    <svg width="14" height="14" viewBox="0 0 16 16">
+                      <path d="M3.5 8.5l3 3 6-7" />
+                    </svg>
+                  ) : (
+                    <span className={styles.markerDot} />
+                  )}
+                </span>
+                <span className={styles.stepName}>{step}</span>
+                {state === 'done' && <span className="visually-hidden"> (done)</span>}
+                {measured && (
+                  <span className={styles.percent} aria-hidden="true">
+                    {Math.round(fraction * 100)}%
+                  </span>
+                )}
+              </span>
+              {measured && (
+                <span className={styles.meter}>
+                  <span
+                    className={styles.track}
+                    role="progressbar"
+                    aria-label="Parts reviewed"
+                    aria-valuemin={0}
+                    aria-valuemax={review.chunksTotal}
+                    aria-valuenow={review.chunksDone}
+                  >
+                    <span className={styles.fill} style={{ '--fraction': fraction } as CSSProperties} />
+                  </span>
+                  <span className={styles.meterText}>
+                    {review.chunksDone} of {review.chunksTotal} parts
+                  </span>
+                </span>
+              )}
+            </li>
+          )
+        })}
+      </ol>
 
       {review.status === 'QUEUED' && review.error && (
         <p className={styles.reason}>
@@ -102,7 +120,6 @@ export function ReviewProgress({ review }: { review: ReviewStatusResponse }) {
           Attempt {review.attempt} of {review.maxAttempts}.
         </p>
       )}
-      <p className={styles.note}>You can leave this page; the review keeps running and stays in your list.</p>
-    </section>
+    </Panel>
   )
 }

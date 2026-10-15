@@ -23,3 +23,44 @@
 .missingText {
   color: var(--color-text-muted);
 }
+
+/* While a review runs: its name on the left, the steps on the right. */
+.progress {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  align-items: start;
+  gap: 64px;
+  max-width: 1100px;
+  padding-top: var(--space-9);
+  padding-bottom: 120px;
+}
+
+.intro {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+/* The review header is the one div here; inside the column, the column sets the spacing. */
+.intro > div {
+  padding: 0;
+}
+
+.note {
+  max-width: 380px;
+  margin-top: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--text-base);
+  line-height: 1.6;
+}
+
+@media (max-width: 860px) {
+  .progress {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-6);
+    padding-top: var(--space-8);
+    padding-bottom: var(--space-8);
+  }
+}
