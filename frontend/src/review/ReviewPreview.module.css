@@ -45,6 +45,16 @@
     filter var(--duration-slow) var(--ease-spring);
 }
 
+/* The layers carry their own shadows, which would hide the shadow-based focus ring. */
+.layer:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 4px;
+}
+
+.score:focus-visible {
+  box-shadow: none;
+}
+
 .viewport:hover .layer[data-state='rest'] {
   --z: calc(var(--depth) + var(--spread));
 }
