@@ -1,53 +1,84 @@
 .header {
-  border-bottom: 1px solid var(--color-border-subtle);
+  display: flex;
+  justify-content: center;
+  padding: var(--space-5) var(--space-4) 0;
 }
 
-.inner {
+/* The floating bar. Without backdrop-filter support it is plain translucent glass. */
+.bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  max-width: var(--content-max-width);
-  min-height: 60px;
-  margin: 0 auto;
-  padding: var(--space-2) var(--space-5);
+  justify-content: center;
+  gap: var(--space-3) 28px;
+  min-height: 56px;
+  padding: var(--space-2) var(--space-2) var(--space-2) 20px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--color-glass);
+  backdrop-filter: blur(24px);
 }
 
 .nav {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2) var(--space-4);
-}
-
-.link,
-.linkActive {
-  padding: var(--space-2) var(--space-1);
-  border-radius: var(--radius-sm);
-  font-weight: 500;
-  text-decoration: none;
-  transition: color var(--duration-fast) var(--ease-out);
+  gap: var(--space-2) 28px;
 }
 
 .link {
+  padding: var(--space-2) var(--space-1);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
   color: var(--color-text-muted);
+  font-size: var(--text-md);
+  text-decoration: none;
+  cursor: pointer;
+  transition: color var(--duration-fast) var(--ease-out);
 }
 
-.link:hover {
+.link:hover,
+.active {
   color: var(--color-text);
 }
 
-.linkActive {
-  color: var(--color-text);
-  text-decoration: underline;
-  text-decoration-color: var(--color-accent);
-  text-decoration-thickness: 2px;
-  text-underline-offset: 8px;
+.active {
+  font-weight: 500;
 }
 
-@media (max-width: 480px) {
-  .inner {
-    padding: var(--space-2) var(--space-4);
+.pill {
+  display: inline-flex;
+  align-items: center;
+  height: var(--control-height);
+  padding: 0 18px;
+  border-radius: var(--radius-pill);
+  background: var(--color-fill-hover);
+  color: var(--color-text);
+  font-size: var(--text-md);
+  font-weight: 500;
+  text-decoration: none;
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.pill:hover,
+.pillActive {
+  background: var(--color-fill-active);
+}
+
+/* On a phone the bar may wrap to two lines; a pill shape would look pinched there. */
+@media (max-width: 520px) {
+  .header {
+    padding-top: var(--space-4);
+  }
+
+  .bar {
+    gap: var(--space-2) var(--space-5);
+    padding-left: var(--space-4);
+    border-radius: var(--radius-card);
+  }
+
+  .nav {
+    gap: var(--space-2) var(--space-4);
   }
 }

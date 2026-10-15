@@ -1,26 +1,26 @@
 .logo {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 10px;
   padding: var(--space-1) 0;
   border-radius: var(--radius-sm);
   color: var(--color-text);
   font-family: var(--font-display);
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   text-decoration: none;
 }
 
 .mark {
   fill: none;
-  stroke-width: 2;
+  stroke-width: 1.25;
 }
 
-.ringAccent {
-  stroke: var(--color-accent);
-}
-
-.ring {
+.ringFront {
   stroke: var(--color-text);
+}
+
+.ringBack {
+  stroke: var(--color-text-muted);
 }
