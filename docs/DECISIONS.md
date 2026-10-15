@@ -551,3 +551,49 @@ Full reasoning and rejected alternatives are in `ARCHITECTURE.md`. The main deci
   fade when a finding opens and the progress bar; all of it stops under reduced motion.
 - **Local lint stays in CI.** The linter binary cannot run on the development machine.
   Rejected: running it in a container, an extra setup for one command CI already runs.
+
+## 2026-10-15: M7.5 frontend redesign
+- **The second approved design replaces the shapes of M7, not its density.** Pills, radii of
+  14 to 32 px and framed cards come back; findings stay rows of about 48 px grouped by file,
+  and the overall score, verdict and sub-scores stay one band. Rejected: keeping the M7
+  shapes (the design was approved to change them); one card per finding (the reason M7
+  made the report denser still holds).
+- **The 3D example is plain CSS** (`perspective`, `preserve-3d`, `translateZ`). Four flat
+  cards of text are what CSS 3D does well, and the text stays real DOM: readable,
+  selectable and reachable by keyboard. Rejected: three.js or `@react-three/fiber` (a large
+  dependency that draws into a canvas, so the cards would leave the accessibility tree);
+  Framer Motion (a dependency for what `transition` already does).
+- **The pointer position is not React state.** It is written to two CSS variables, at most
+  once a frame; only the card in focus is state. Rejected: state per pointer move, which
+  re-renders the component dozens of times a second.
+- **Motion stays limited.** 3D only on the new review screen; elsewhere hover colours, a
+  press on buttons, the arrow of a primary button and the progress bar. No entrance or
+  scroll animations. Without a mouse, below 720 px and under reduced motion the scene does
+  not tilt; on narrow screens the cards are a flat list.
+- **Tokens stay one file of semantic names.** New groups for surfaces and translucent fills,
+  gradients, shadows, larger radii and a spring curve; the existing names kept their
+  meaning, so no module had to change for the new values. Repeated patterns are components
+  (`Panel`, `Eyebrow`, `StatusMark`, `Button` with an arrow). Rejected: a second layer of
+  raw palette tokens (useful with several themes, not with one); tokens in TypeScript or
+  CSS-in-JS; Tailwind.
+- **The faint text colour is lighter than drawn** (`#7a8597` instead of `#6f7a8b`): the
+  drawn one is 4.35:1 on a card, below 4.5:1 for small text. On the landing page, measured
+  where it stands on the gradient, small text is at least 5.2:1.
+- **A new route, `/reviews/new`, for the new review screen.** The existing routes are
+  unchanged; the navigation's "New review" goes there. The landing page keeps its form for
+  everyone, and the failure screen still offers the start page. Rejected: showing the new
+  screen at `/` for signed-in users, which changes what an existing address shows.
+- **The recent reviews use the history endpoint** with a page size of 3. Rejected: an
+  endpoint of their own for the same data.
+- **What the design shows and the API does not have is left out:** a readability
+  sub-score and categories beyond security, maintainability and performance; file and
+  line counts while a review is fetching; per-code failure headlines. The progress keeps
+  its four steps (queued is one) and its sentences; the failure keeps "Try again" where it
+  can help. The texts of buttons and headings stay as they were.
+- **Review statuses are round dots**, finding levels stay square marks, so the two never
+  look alike.
+- **The background glows are clipped on both axes** (`overflow: clip`), so a short page does
+  not grow to fit them. Rejected: `overflow: hidden`, which makes a scroll container and
+  breaks the sticky file list of the report.
+- **The cards of the example take an outline when focused.** They carry their own shadows,
+  which would hide the shadow-based focus ring used elsewhere.
