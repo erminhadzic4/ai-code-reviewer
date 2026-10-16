@@ -60,3 +60,18 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  images:
+    name: Container images
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      # The compose file requires these variables to be set even for a build. The example
+      # values are enough: nothing is started here.
+      - name: Provide the example configuration
+        run: cp .env.example .env
+
+      - name: Build the images
+        run: docker compose build
