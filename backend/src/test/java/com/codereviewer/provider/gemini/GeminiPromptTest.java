@@ -3,7 +3,10 @@ package com.codereviewer.provider.gemini;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.lang.reflect.RecordComponent;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.Arrays;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 
@@ -16,9 +19,43 @@ import org.junit.jupiter.api.Test;
 
 class GeminiPromptTest {
 
+	/** SHA-256 of the instructions of version 2. */
+	private static final String INSTRUCTIONS_HASH = "0e6b24d390ec85c749e9929d20e9192800163f45ad483997d5a60e059e0e227b";
+
 	@Test
 	void versionIsPositive() {
 		assertThat(GeminiPrompt.VERSION).isPositive();
+	}
+
+	/**
+	 * The version is part of the cache key, so a change to the instructions without a new
+	 * version would serve analyses made with the old ones. When this fails after a change to
+	 * the instructions, raise {@link GeminiPrompt#VERSION} and put both new values here.
+	 */
+	@Test
+	void instructionsBelongToTheirVersion() throws Exception {
+		String hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+				.digest(GeminiPrompt.SYSTEM_INSTRUCTION.getBytes(StandardCharsets.UTF_8)));
+
+		assertThat(GeminiPrompt.VERSION).isEqualTo(2);
+		assertThat(hash).isEqualTo(INSTRUCTIONS_HASH);
+	}
+
+	@Test
+	void instructionsAskToConfirmAConsequenceInTheCodeBeforeReportingIt() {
+		assertThat(GeminiPrompt.SYSTEM_INSTRUCTION)
+				.contains("confirm that the value or code is really used in the way that causes it")
+				.contains("If following the code shows that the value has no effect on the outcome, it is dead or "
+						+ "misleading code, not wrong behaviour.")
+				.contains("Do not claim an effect you cannot trace in the given code.");
+	}
+
+	@Test
+	void instructionsKeepCriticalAndHighForFailuresThatAreShown() {
+		assertThat(GeminiPrompt.SYSTEM_INSTRUCTION)
+				.contains("CRITICAL and HIGH need evidence: the explanation names the line where the failure happens "
+						+ "and how it is triggered.")
+				.contains("as MEDIUM or LOW.");
 	}
 
 	@Test

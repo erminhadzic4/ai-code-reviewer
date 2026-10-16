@@ -24,7 +24,7 @@ final class GeminiPrompt {
 	 * the schema or the way the code is laid out, because each of them can change the
 	 * findings.
 	 */
-	static final int VERSION = 1;
+	static final int VERSION = 2;
 
 	/**
 	 * Most findings one chunk may return. Together with the lengths the instructions ask for,
@@ -63,6 +63,17 @@ final class GeminiPrompt {
 			- MEDIUM: makes the code harder to change or noticeably slower than it needs to be.
 			- LOW: minor smell or style problem.
 			For a GOOD_PRACTICE the severity is null.
+			CRITICAL and HIGH need evidence: the explanation names the line where the failure \
+			happens and how it is triggered. If you cannot show both in the input, report only what \
+			the code visibly shows, such as dead code, a misleading name or duplication, as MEDIUM \
+			or LOW.
+
+			EVIDENCE
+			Before you report a consequence, such as a bug or wrong behaviour, follow the code in the \
+			input and confirm that the value or code is really used in the way that causes it. If \
+			following the code shows that the value has no effect on the outcome, it is dead or \
+			misleading code, not wrong behaviour. Do not claim an effect you cannot trace in the \
+			given code.
 
 			location:
 			- filePath is the path exactly as written in the file marker.
