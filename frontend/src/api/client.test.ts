@@ -3,6 +3,11 @@ import { readToken, writeToken } from '../auth/tokenStore'
 import { fakeBackend, problem } from '../test/api'
 import { ApiError, apiRequest, setSessionExpiredHandler } from './client'
 
+/** Answers every fetch with one response that is not JSON, as a proxy would. */
+function stubFetch(response: Response) {
+  vi.stubGlobal('fetch', vi.fn(async () => response))
+}
+
 describe('apiRequest', () => {
   beforeEach(() => {
     localStorage.clear()
@@ -56,6 +61,36 @@ describe('apiRequest', () => {
 
     await expect(apiRequest('/api/reviews')).rejects.toMatchObject({
       status: 500,
+      message: 'The server ran into a problem. Try again in a moment.',
+    })
+  })
+
+  it('reports a proxy that cannot reach the backend like a network failure', async () => {
+    stubFetch(new Response('<html><head><title>502 Bad Gateway</title></head></html>', {
+      status: 502,
+      headers: { 'Content-Type': 'text/html' },
+    }))
+
+    await expect(apiRequest('/api/reviews')).rejects.toMatchObject({
+      status: 502,
+      message: 'Could not reach the server. Check that the backend is running and try again.',
+    })
+  })
+
+  it('reports a proxy timeout with an empty body like a network failure', async () => {
+    stubFetch(new Response(null, { status: 504 }))
+
+    await expect(apiRequest('/api/reviews')).rejects.toMatchObject({
+      status: 504,
+      message: 'Could not reach the server. Check that the backend is running and try again.',
+    })
+  })
+
+  it('treats a gateway status with a problem detail as an error of the backend itself', async () => {
+    fakeBackend({ 'GET /api/reviews': problem(503, 'GitHub rate limit reached') })
+
+    await expect(apiRequest('/api/reviews')).rejects.toMatchObject({
+      status: 503,
       message: 'The server ran into a problem. Try again in a moment.',
     })
   })

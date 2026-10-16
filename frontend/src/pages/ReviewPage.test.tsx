@@ -142,4 +142,15 @@ describe('ReviewPage', () => {
     await nextPoll()
     expect(screen.getByText('Waiting in the queue. Reviews run one at a time.')).toBeInTheDocument()
   })
+
+  it('keeps asking while the proxy cannot reach the backend', async () => {
+    // No body: what a proxy answers while the backend is down or starting.
+    const fetchMock = backend([{ status: 502 }, { status: 200, body: status() }])
+    renderApp(`/reviews/${REVIEW_ID}`)
+
+    expect(await screen.findByText(/Could not reach the server/)).toBeInTheDocument()
+    await nextPoll()
+    expect(screen.getByText('Waiting in the queue. Reviews run one at a time.')).toBeInTheDocument()
+    expect(statusCalls(fetchMock)).toBe(2)
+  })
 })

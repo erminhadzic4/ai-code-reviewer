@@ -19,6 +19,9 @@ export class ApiError extends Error {
 
 const NETWORK_MESSAGE = 'Could not reach the server. Check that the backend is running and try again.'
 
+/** Bad gateway, service unavailable and gateway timeout: what a proxy answers for a missing backend. */
+const GATEWAY_STATUSES = new Set([502, 503, 504])
+
 let onSessionExpired: () => void = () => {}
 
 /** Called when a request that carried a token is refused with 401. */
@@ -78,7 +81,13 @@ async function toApiError(response: Response): Promise<ApiError> {
     // Not JSON, for example a proxy error page.
   }
   if (response.status >= 500) {
-    // The backend keeps internals out of a 500, and a proxy's 502 has nothing to show.
+    // A gateway status without a problem detail comes from the proxy in front of the
+    // backend: the backend is down or still starting. The status stays real, so callers
+    // that retry a 5xx keep retrying.
+    if (GATEWAY_STATUSES.has(response.status) && !isProblem(body)) {
+      return new ApiError(response.status, NETWORK_MESSAGE)
+    }
+    // The backend keeps internals out of a 500.
     return new ApiError(response.status, 'The server ran into a problem. Try again in a moment.')
   }
   if (!isProblem(body)) {
