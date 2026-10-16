@@ -1,0 +1,12 @@
+# Only the wrapper, pom.xml and the main sources are needed to build the image.
+target/
+src/test/
+.idea/
+.vscode/
+*.iml
+
+# Never send local configuration or secrets into an image.
+.env
+.env.*
+*.pem
+*.key
