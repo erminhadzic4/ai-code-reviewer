@@ -37,8 +37,8 @@ Scope for now: runs locally. Public deployment is a later option (see "Later").
   - [x] Error states: unreachable backend, expired session, links from the failure screen
   - [x] Version 1.0.0, favicon matching the navigation logo
   - [x] Real review with Gemini on a small public repository
-  - [ ] Demo GIF
-  - [ ] README
+  - [x] Demo GIF
+  - [x] README
   - [ ] Tag `v1.0`
 
 ## V2: deeper analysis
