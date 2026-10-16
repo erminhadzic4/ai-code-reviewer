@@ -75,6 +75,70 @@ analysis, so the model quota is spent once.
 users 1 ──── N reviews N ──── 1 analyses 1 ──── N findings
 ```
 
+From the Flyway migrations `V1` to `V3` (important columns only):
+
+```mermaid
+erDiagram
+    users ||--o{ reviews : "submits"
+    analyses |o--o{ reviews : "result of (set when COMPLETED)"
+    analyses ||--o{ findings : "has"
+
+    users {
+        bigint id PK
+        varchar email UK "lower case"
+        varchar password_hash
+        timestamptz created_at
+    }
+    reviews {
+        uuid id PK
+        bigint user_id FK
+        varchar repo_owner
+        varchar repo_name
+        char commit_sha
+        varchar status "QUEUED, RUNNING, COMPLETED, FAILED"
+        varchar stage "FETCHING, ANALYZING, SCORING"
+        int chunks_done
+        int chunks_total
+        int attempts
+        timestamptz run_after
+        varchar error_code
+        bigint analysis_id FK
+        boolean cache_hit
+    }
+    analyses {
+        bigint id PK
+        varchar repo_owner "cache key"
+        varchar repo_name "cache key"
+        char commit_sha "cache key"
+        varchar provider "cache key"
+        varchar model "cache key"
+        int prompt_version "cache key"
+        smallint overall_score
+        smallint security_score
+        smallint maintainability_score
+        smallint performance_score
+        int files_analyzed
+        int files_skipped
+        int files_failed
+        int findings_discarded
+        int lines_analyzed
+    }
+    findings {
+        bigint id PK
+        bigint analysis_id FK
+        varchar kind "ISSUE, GOOD_PRACTICE"
+        varchar category "SECURITY, MAINTAINABILITY, PERFORMANCE"
+        varchar severity "null for a good practice"
+        varchar file_path
+        int line_start
+        int line_end
+        varchar title
+        text explanation
+        text suggested_code
+        text code_snippet
+    }
+```
+
 ### users
 
 | Column | Type | Notes |
@@ -344,6 +408,69 @@ Browser            Backend (HTTP)        Database      Worker             GitHub
    │◄── report ─────────┤                   │              │                 │          │
 ```
 
+The same flow in more detail:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant B as Browser
+    participant API as ReviewController
+    participant DB as PostgreSQL
+    participant W as ReviewWorker
+    participant GH as GitHub
+    participant M as Gemini
+
+    B->>API: POST /api/reviews {url}
+    API->>DB: INSERT review QUEUED
+    API-->>B: 202 {id}
+    loop about once a second
+        W->>DB: claim oldest due QUEUED (FOR UPDATE SKIP LOCKED), set RUNNING
+    end
+    W->>GH: default branch and HEAD commit SHA (stage FETCHING)
+    W->>DB: analysis for (repo, SHA, provider, model, prompt version)?
+    alt cached
+        W->>DB: link analysis, COMPLETED, cache_hit = true
+    else not cached
+        W->>GH: zip archive of the commit
+        Note over W: FileFilter, then Chunker (200 000 characters per chunk)
+        loop every chunk (stage ANALYZING)
+            W->>M: numbered source of the chunk
+            alt rate limit, 5xx or invalid JSON
+                Note over W,M: sent again after 5 s, then 20 s (at most 3 sendings)
+            end
+            M-->>W: JSON findings
+            Note over W: FindingValidator: schema, file, lines exist, else discarded
+            W->>DB: chunks_done + 1
+        end
+        Note over W: ScoreCalculator computes the scores from the findings (stage SCORING)
+        W->>DB: INSERT analysis and findings, review COMPLETED
+    end
+    loop every 2 s until COMPLETED or FAILED
+        B->>API: GET /api/reviews/{id}
+        API-->>B: status, stage, progress
+    end
+    B->>API: GET /api/reviews/{id}/result
+    API-->>B: scores and findings
+```
+
+States of a review (`reviews.status`, with `stage` while it runs):
+
+```mermaid
+stateDiagram-v2
+    [*] --> QUEUED: submitted
+    QUEUED --> RUNNING: claimed by the worker
+    state RUNNING {
+        [*] --> FETCHING
+        FETCHING --> ANALYZING: not in the cache
+        ANALYZING --> SCORING
+    }
+    RUNNING --> COMPLETED: analysis stored or found in the cache
+    RUNNING --> QUEUED: transient error or restart, attempts left (later run_after)
+    RUNNING --> FAILED: permanent error, or no attempts left
+    COMPLETED --> [*]
+    FAILED --> [*]
+```
+
 1. **Submit.** `RepoUrlParser` accepts only `github.com/{owner}/{repo}`: with `https://`,
    `http://` or no scheme, an optional `www.`, an optional `.git` suffix and an optional
    trailing slash. Anything else is rejected, including links to a branch or a file. The
@@ -587,6 +714,24 @@ URL parser, validator) need no database.
 ```
 cp .env.example .env      # once; set JWT_SECRET, add a Gemini API key if you have one
 docker compose up --build
+```
+
+```mermaid
+flowchart LR
+    browser["Browser"]
+    subgraph compose["docker compose (ports on 127.0.0.1)"]
+        frontend["frontend: nginx, port 3000 to 80<br/>static files, proxies /api"]
+        backend["backend: Spring Boot, port 8080<br/>REST API, worker, Swagger UI"]
+        db[("db: PostgreSQL, port 5432<br/>volume db-data")]
+    end
+    github["GitHub<br/>api.github.com, codeload.github.com"]
+    gemini["Gemini API<br/>generativelanguage.googleapis.com"]
+
+    browser -->|"http://localhost:3000"| frontend
+    frontend -->|"/api/* to backend:8080"| backend
+    backend -->|JDBC, Flyway| db
+    backend -->|HTTPS| github
+    backend -->|"HTTPS, only with REVIEW_PROVIDER=gemini"| gemini
 ```
 
 | Service | What it is | Port on `127.0.0.1` | Healthy when | Starts after |
