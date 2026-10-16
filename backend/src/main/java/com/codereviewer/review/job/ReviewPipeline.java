@@ -98,7 +98,7 @@ public class ReviewPipeline {
 				scores.performance(), analysis.filesAnalyzed(), filesSkipped, analysis.filesFailed(),
 				analysis.linesAnalyzed(), analysis.findingsDiscarded());
 		store.complete(id, result, findings, clock.instant());
-		log.info("Review {} completed: {} files, {} findings, overall score {}", id, analysis.filesAnalyzed(),
+		log.info("Review {} completed: {} files, {} findings including good practices, overall score {}", id, analysis.filesAnalyzed(),
 				findings.size(), scores.overall());
 	}
 
