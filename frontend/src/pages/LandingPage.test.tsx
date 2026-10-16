@@ -53,6 +53,28 @@ describe('LandingPage', () => {
     expect(await screen.findByDisplayValue('https://github.com/octo/demo')).toBeInTheDocument()
   })
 
+  it('sends a user whose session expired to log in and keeps the URL', async () => {
+    writeToken('valid')
+    fakeBackend({
+      ...ME,
+      'POST /api/reviews': problem(401, 'Authentication required'),
+      'POST /api/auth/login': { status: 200, body: { accessToken: 't', expiresIn: 86400, user: { id: 1, email: 'ana@example.com' } } },
+    })
+    renderApp('/')
+    await screen.findByRole('button', { name: 'Log out' })
+
+    submit('https://github.com/octo/demo')
+
+    expect(await screen.findByText('Your session has expired. Log in again.')).toHaveAttribute('role', 'status')
+    expect(screen.getByText('Sign in to review https://github.com/octo/demo.')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'ana@example.com' } })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret-password' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Log in' }))
+
+    expect(await screen.findByDisplayValue('https://github.com/octo/demo')).toBeInTheDocument()
+  })
+
   it('shows why the backend refused the URL next to the field', async () => {
     writeToken('valid')
     fakeBackend({

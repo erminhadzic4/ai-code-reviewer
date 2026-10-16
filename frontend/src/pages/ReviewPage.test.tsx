@@ -103,6 +103,7 @@ describe('ReviewPage', () => {
 
     expect(await screen.findByRole('heading', { name: 'The review failed' })).toBeInTheDocument()
     expect(screen.getByText('The model did not answer')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Review another repository' })).toHaveAttribute('href', '/reviews/new')
 
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
 
@@ -122,7 +123,7 @@ describe('ReviewPage', () => {
 
     expect(await screen.findByText('Repository not found or private')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Review another repository' })).toHaveAttribute('href', '/')
+    expect(screen.getByRole('link', { name: 'Review another repository' })).toHaveAttribute('href', '/reviews/new')
   })
 
   it('treats a review of another account like one that does not exist', async () => {
@@ -141,5 +142,16 @@ describe('ReviewPage', () => {
     expect(await screen.findByText(/Could not reach the server/)).toBeInTheDocument()
     await nextPoll()
     expect(screen.getByText('Waiting in the queue. Reviews run one at a time.')).toBeInTheDocument()
+  })
+
+  it('keeps asking while the proxy cannot reach the backend', async () => {
+    // No body: what a proxy answers while the backend is down or starting.
+    const fetchMock = backend([{ status: 502 }, { status: 200, body: status() }])
+    renderApp(`/reviews/${REVIEW_ID}`)
+
+    expect(await screen.findByText(/Could not reach the server/)).toBeInTheDocument()
+    await nextPoll()
+    expect(screen.getByText('Waiting in the queue. Reviews run one at a time.')).toBeInTheDocument()
+    expect(statusCalls(fetchMock)).toBe(2)
   })
 })

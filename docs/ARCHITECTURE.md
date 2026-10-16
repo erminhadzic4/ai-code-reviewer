@@ -75,6 +75,70 @@ analysis, so the model quota is spent once.
 users 1 ──── N reviews N ──── 1 analyses 1 ──── N findings
 ```
 
+From the Flyway migrations `V1` to `V3` (important columns only):
+
+```mermaid
+erDiagram
+    users ||--o{ reviews : "submits"
+    analyses |o--o{ reviews : "result of (set when COMPLETED)"
+    analyses ||--o{ findings : "has"
+
+    users {
+        bigint id PK
+        varchar email UK "lower case"
+        varchar password_hash
+        timestamptz created_at
+    }
+    reviews {
+        uuid id PK
+        bigint user_id FK
+        varchar repo_owner
+        varchar repo_name
+        char commit_sha
+        varchar status "QUEUED, RUNNING, COMPLETED, FAILED"
+        varchar stage "FETCHING, ANALYZING, SCORING"
+        int chunks_done
+        int chunks_total
+        int attempts
+        timestamptz run_after
+        varchar error_code
+        bigint analysis_id FK
+        boolean cache_hit
+    }
+    analyses {
+        bigint id PK
+        varchar repo_owner "cache key"
+        varchar repo_name "cache key"
+        char commit_sha "cache key"
+        varchar provider "cache key"
+        varchar model "cache key"
+        int prompt_version "cache key"
+        smallint overall_score
+        smallint security_score
+        smallint maintainability_score
+        smallint performance_score
+        int files_analyzed
+        int files_skipped
+        int files_failed
+        int findings_discarded
+        int lines_analyzed
+    }
+    findings {
+        bigint id PK
+        bigint analysis_id FK
+        varchar kind "ISSUE, GOOD_PRACTICE"
+        varchar category "SECURITY, MAINTAINABILITY, PERFORMANCE"
+        varchar severity "null for a good practice"
+        varchar file_path
+        int line_start
+        int line_end
+        varchar title
+        text explanation
+        text suggested_code
+        text code_snippet
+    }
+```
+
 ### users
 
 | Column | Type | Notes |
@@ -301,6 +365,16 @@ so one commit would have several analyses and spend quota several times.
 
 `GET /actuator/health` (Spring Boot Actuator), `/swagger-ui.html`, `/v3/api-docs`.
 
+The API documentation is generated from the controllers by springdoc and served by the
+backend at `http://localhost:8080/swagger-ui.html`. The description and the viewer are
+public; every endpoint they describe still needs a token, except registration and login.
+To call a protected endpoint from the viewer:
+
+1. Open `POST /api/auth/login`, choose "Try it out", send an email and password, and copy
+   `accessToken` from the answer.
+2. Choose "Authorize" at the top of the page and paste the token alone, without `Bearer `.
+3. Endpoints marked with a lock now send `Authorization: Bearer <token>`.
+
 | Decision | Rejected | Why |
 |---|---|---|
 | 202 Accepted, then polling about every 2 s | Synchronous response; SSE or WebSocket | A review takes seconds to minutes, so a single request would time out. SSE and WebSocket need a long-lived connection and more code; polling is enough locally. |
@@ -332,6 +406,69 @@ Browser            Backend (HTTP)        Database      Worker             GitHub
    │ GET /{id}/result   │                   │              │                 │          │
    ├───────────────────►│ ─────────────────►│              │                 │          │
    │◄── report ─────────┤                   │              │                 │          │
+```
+
+The same flow in more detail:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant B as Browser
+    participant API as ReviewController
+    participant DB as PostgreSQL
+    participant W as ReviewWorker
+    participant GH as GitHub
+    participant M as Gemini
+
+    B->>API: POST /api/reviews {url}
+    API->>DB: INSERT review QUEUED
+    API-->>B: 202 {id}
+    loop about once a second
+        W->>DB: claim oldest due QUEUED (FOR UPDATE SKIP LOCKED), set RUNNING
+    end
+    W->>GH: default branch and HEAD commit SHA (stage FETCHING)
+    W->>DB: analysis for (repo, SHA, provider, model, prompt version)?
+    alt cached
+        W->>DB: link analysis, COMPLETED, cache_hit = true
+    else not cached
+        W->>GH: zip archive of the commit
+        Note over W: FileFilter, then Chunker (200 000 characters per chunk)
+        loop every chunk (stage ANALYZING)
+            W->>M: numbered source of the chunk
+            alt rate limit, 5xx or invalid JSON
+                Note over W,M: sent again after 5 s, then 20 s (at most 3 sendings)
+            end
+            M-->>W: JSON findings
+            Note over W: FindingValidator: schema, file, lines exist, else discarded
+            W->>DB: chunks_done + 1
+        end
+        Note over W: ScoreCalculator computes the scores from the findings (stage SCORING)
+        W->>DB: INSERT analysis and findings, review COMPLETED
+    end
+    loop every 2 s until COMPLETED or FAILED
+        B->>API: GET /api/reviews/{id}
+        API-->>B: status, stage, progress
+    end
+    B->>API: GET /api/reviews/{id}/result
+    API-->>B: scores and findings
+```
+
+States of a review (`reviews.status`, with `stage` while it runs):
+
+```mermaid
+stateDiagram-v2
+    [*] --> QUEUED: submitted
+    QUEUED --> RUNNING: claimed by the worker
+    state RUNNING {
+        [*] --> FETCHING
+        FETCHING --> ANALYZING: not in the cache
+        ANALYZING --> SCORING
+    }
+    RUNNING --> COMPLETED: analysis stored or found in the cache
+    RUNNING --> QUEUED: transient error or restart, attempts left (later run_after)
+    RUNNING --> FAILED: permanent error, or no attempts left
+    COMPLETED --> [*]
+    FAILED --> [*]
 ```
 
 1. **Submit.** `RepoUrlParser` accepts only `github.com/{owner}/{repo}`: with `https://`,
@@ -575,17 +712,50 @@ URL parser, validator) need no database.
 ## 6. Running locally
 
 ```
-cp .env.example .env      # once; add a Gemini API key if you have one
+cp .env.example .env      # once; set JWT_SECRET, add a Gemini API key if you have one
 docker compose up --build
 ```
 
-| Service | What it is | Port |
-|---|---|---|
-| `db` | `postgres:18`, named volume, health check | 5432, on `127.0.0.1` only |
-| `backend` | multi-stage Dockerfile: Maven build, then a JRE 21 image; waits for `db` to be healthy | 8080 |
-| `frontend` | multi-stage Dockerfile: `npm run build`, then nginx serving static files and proxying `/api` to the backend | 3000 |
+```mermaid
+flowchart LR
+    browser["Browser"]
+    subgraph compose["docker compose (ports on 127.0.0.1)"]
+        frontend["frontend: nginx, port 3000 to 80<br/>static files, proxies /api"]
+        backend["backend: Spring Boot, port 8080<br/>REST API, worker, Swagger UI"]
+        db[("db: PostgreSQL, port 5432<br/>volume db-data")]
+    end
+    github["GitHub<br/>api.github.com, codeload.github.com"]
+    gemini["Gemini API<br/>generativelanguage.googleapis.com"]
+
+    browser -->|"http://localhost:3000"| frontend
+    frontend -->|"/api/* to backend:8080"| backend
+    backend -->|JDBC, Flyway| db
+    backend -->|HTTPS| github
+    backend -->|"HTTPS, only with REVIEW_PROVIDER=gemini"| gemini
+```
+
+| Service | What it is | Port on `127.0.0.1` | Healthy when | Starts after |
+|---|---|---|---|---|
+| `db` | `postgres:18`, named volume | 5432 | `pg_isready` answers | – |
+| `backend` | multi-stage Dockerfile: the Maven Wrapper builds the jar on a JDK 21 image, a JRE 21 image runs it as a user without root rights | 8080 (API documentation) | `curl -fsS http://localhost:8080/actuator/health` succeeds | `db` is healthy |
+| `frontend` | multi-stage Dockerfile: `npm ci` and `npm run build` on a Node image, then nginx serving the files and proxying `/api` to the backend | 3000 | `wget` gets `http://127.0.0.1/` | `backend` is healthy |
 
 The browser talks only to `http://localhost:3000`, so no CORS configuration is needed.
+Every base image is pinned to an exact tag. Tests are not run while an image is built: they
+need Docker for their database, and CI runs them; a separate CI job builds both images.
+
+- **Migrations** run when the backend starts (Flyway, as on the host), before it accepts a
+  request, so the health check passes only after them.
+- **Variables:** Compose reads `.env` next to `docker-compose.yml` and gives each service an
+  explicit list. The backend gets the database settings (with `DB_HOST=db`), `JWT_SECRET`,
+  `GITHUB_TOKEN`, `REVIEW_PROVIDER`, `GEMINI_API_KEY` and `GEMINI_MODEL`; the frontend gets
+  none. `JWT_SECRET` is required: Compose refuses an empty value, and the backend refuses the
+  example value. A variable set in the shell or in the operating system's environment takes
+  precedence over `.env`, both for Compose and for a backend started on the host.
+- **nginx** serves the built files, sends any other address to `index.html` so the router
+  can handle it, caches the hashed files under `/assets/` for a year and answers 404 for a
+  missing one. It looks up the address of `backend` per request through Docker's DNS, so it
+  starts without the backend and follows a recreated container.
 
 `.env.example` (placeholders only; `.env` is git-ignored). The file lists only variables
 that are in use, so each one is added by the milestone that introduces it; the complete
@@ -608,12 +778,14 @@ and `npm run dev` (Vite proxies `/api` to port 8080). The database port is publi
 the repository root, so the same file configures both the database and the backend.
 
 The `db` service and `.env.example` arrived in M1 with the first table; the `backend` and
-`frontend` containers arrive in M8.
+`frontend` containers arrived in M8.
 
 | Decision | Rejected | Why |
 |---|---|---|
 | Docker Compose with three services | Everything installed on the host | Would require installing PostgreSQL and Maven and starting three things by hand. |
 | nginx serves the frontend and proxies `/api` | Spring Boot serving the frontend's static files | One container fewer, but it couples two builds into one. |
+| An explicit list of variables per service | `env_file: .env` on every service | Every container would receive every value, the Gemini key included. |
+| `JWT_SECRET` set by hand | A default secret; one generated at start | A default is public; a secret generated at every start makes every token invalid after a restart. |
 | Ollama not in the compose file | An Ollama service by default | The image and a model take several gigabytes, and V1 has no Ollama milestone. |
 
 ## 7. Frontend notes

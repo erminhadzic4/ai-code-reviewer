@@ -33,12 +33,12 @@ export function ReviewFailed({ review }: { review: ReviewStatusResponse }) {
             <Button variant="primary" size="lg" arrow busy={busy} onClick={resubmit}>
               {busy ? 'Submitting…' : 'Try again'}
             </Button>
-            <ButtonLink to="/" variant="text">
+            <ButtonLink to="/reviews/new" variant="text">
               Review another repository
             </ButtonLink>
           </>
         ) : (
-          <ButtonLink to="/" variant="primary" size="lg" arrow>
+          <ButtonLink to="/reviews/new" variant="primary" size="lg" arrow>
             Review another repository
           </ButtonLink>
         )}

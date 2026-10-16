@@ -1,0 +1,12 @@
+# Installed and built inside the image.
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+.vite/
+.idea/
+.vscode/
+
+# Never send local configuration or secrets into an image.
+.env
+.env.*

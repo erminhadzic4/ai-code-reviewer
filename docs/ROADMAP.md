@@ -31,8 +31,15 @@ Scope for now: runs locally. Public deployment is a later option (see "Later").
       screen). Visual changes and one new screen; routes, API calls, polling and auth behavior
       stay as they are, existing tests stay green, accessibility is kept (focus ring, skip link,
       reduced motion)
-- [ ] M8 Polish: Swagger, one-command local run (docker-compose, `.env.example`),
-      error states, demo GIF, README, tag `v1.0`
+- [ ] M8 Polish
+  - [x] API documentation with Swagger (springdoc)
+  - [x] One-command local run: Dockerfiles, `docker compose`, `.env.example`; images built in CI
+  - [x] Error states: unreachable backend, expired session, links from the failure screen
+  - [x] Version 1.0.0, favicon matching the navigation logo
+  - [x] Real review with Gemini on a small public repository
+  - [x] Demo GIF
+  - [x] README
+  - [ ] Tag `v1.0`
 
 ## V2: deeper analysis
 - [ ] Review of a single file with comments next to lines
@@ -60,8 +67,12 @@ users of one key, so a public version needs protection first.
 - [ ] Pre-generated example reviews of well-known repositories on the landing page
 - [ ] Optional bring-your-own-key: user supplies their own Gemini key
 - [ ] Free hosting decision (cold starts, limits); Ollama stays local-only
+- [ ] Turn off the API documentation (`springdoc.api-docs.enabled=false`,
+      `springdoc.swagger-ui.enabled=false`)
 - [ ] Paid advanced feature / plans (design for it, do not build until decided)
 
 ## Other ideas (not committed)
 - [ ] Private repositories via GitHub OAuth
 - [ ] Additional providers (OpenAI)
+- [ ] Skip generated resource files such as `.resx` in the file filter if they become a
+      problem: in the first real review they took more than a third of the input and drew no findings

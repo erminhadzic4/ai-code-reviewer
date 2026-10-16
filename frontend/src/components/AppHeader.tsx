@@ -29,7 +29,8 @@ export function AppHeader() {
     <header className={styles.header}>
       <div className={styles.bar}>
         <Logo />
-        {state.status !== 'loading' && (
+        {/* Hidden while it is not known whether anyone is signed in. */}
+        {(state.status === 'signedIn' || state.status === 'signedOut') && (
           <nav aria-label="Main" className={styles.nav}>
             {state.status === 'signedIn' ? (
               <>

@@ -1,3 +1,6 @@
+# The whole application: docker compose up --build, then http://localhost:3000.
+# Values come from the .env file next to this one (copy .env.example). Each service gets
+# only the variables it needs. Every port is published on localhost only.
 services:
   db:
     image: postgres:18
@@ -6,7 +9,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
     ports:
-      # Published on localhost only, so a backend running on the host can reach it.
+      # Published so that a backend running on the host can reach it during development.
       - "127.0.0.1:5432:5432"
     volumes:
       - db-data:/var/lib/postgresql
@@ -15,6 +18,48 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  backend:
+    build: ./backend
+    environment:
+      DB_HOST: db
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      REVIEW_PROVIDER: ${REVIEW_PROVIDER:-fake}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash-lite}
+    ports:
+      # Published for the API documentation at http://localhost:8080/swagger-ui.html.
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      # Healthy once the migrations have run and the application accepts requests.
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 60s
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "127.0.0.1:3000:80"
+    depends_on:
+      # Started only when the API answers, so the first page never meets a missing backend.
+      backend:
+        condition: service_healthy
+    healthcheck:
+      # 127.0.0.1 and not localhost: nginx listens on IPv4 only, and localhost may resolve
+      # to the IPv6 address first.
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
 
 volumes:
   db-data:

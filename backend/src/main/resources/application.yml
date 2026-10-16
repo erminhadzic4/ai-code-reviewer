@@ -67,6 +67,11 @@ app:
       # Pause between two looks at the queue, and between two reviews.
       poll-interval: 1s
 
+springdoc:
+  # Without this every operation would also list the generic answers of the exception
+  # handler (500 and others); each operation lists its own instead.
+  override-with-generic-response: false
+
 management:
   endpoints:
     web:
