@@ -666,8 +666,8 @@ Full reasoning and rejected alternatives are in `ARCHITECTURE.md`. The main deci
 - **Generated resource files are not filtered for now.** The 14 `.resx` files of that
   repository, with `.gitignore` and `.gitattributes`, took an estimated 30 000 of the 78 000
   input tokens (by their share of the characters) and drew no finding. Rejected for now:
-  adding them to the file filter on the evidence of one review; noted under "Later" in the
-  ROADMAP.
+  adding them to the file filter on the evidence of one review; noted under "Other ideas" in
+  the ROADMAP.
 - **The prompt asks for evidence (version 2).** Before reporting a consequence, the model is
   told to confirm in the given code that the value or code is used in the way that causes
   it; CRITICAL and HIGH must name the line where the failure happens and how it is
@@ -679,3 +679,14 @@ Full reasoning and rejected alternatives are in `ARCHITECTURE.md`. The main deci
   findings overall, the unused value behind the six findings not reported at all although
   the prompt asks for it, and no good practice in that run. The prompt is not tuned further
   on this evidence.
+- **A second repository with prompt version 2 still drew one wrong HIGH finding.** A public
+  C# repository of 11 files (1 898 lines, one chunk): one request, no retry, three issues
+  and one good practice, score 95 (maintainability 87). The HIGH finding says that a loop
+  creates a new `Random` on every pass and may never end; the `Random` is created once, before
+  the loop. The loop is in fact unbounded, but for another reason: it never ends when the
+  value it looks for is missing. So the title is partly right while the explanation and the
+  suggested fix are wrong, despite the evidence rule. The MEDIUM and LOW findings are correct.
+  The report shows HIGH and MEDIUM together as "Warning". Neither the prompt nor its version
+  is changed: one run is one sample, and the README states that findings can be wrong.
+- **The completion log counts good practices.** "4 findings" in the log were three issues and
+  one good practice; the line now says "findings including good practices".
