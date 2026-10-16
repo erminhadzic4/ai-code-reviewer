@@ -10,7 +10,7 @@
 	</parent>
 	<groupId>com.codereviewer</groupId>
 	<artifactId>backend</artifactId>
-	<version>0.0.1-SNAPSHOT</version>
+	<version>1.0.0</version>
 	<name>backend</name>
 	<description>Backend for the code review application</description>
 	<properties>
