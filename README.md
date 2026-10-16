@@ -19,6 +19,20 @@ lists the findings by severity, with the affected lines and a suggested change.
 It is a portfolio project that runs locally with one command. The model is optional: a fake
 provider with fixed findings lets you try the whole flow without an API key.
 
+## Screenshots
+
+The report screens show a real review of a small public C# repository with Gemini.
+
+| | |
+|---|---|
+| ![Landing page](docs/media/01-landing.png) | **Landing page.** A repository URL is the only input; the example card shows the shape of a finding. |
+| ![Report](docs/media/02-report.png) | **Report.** The overall score and the three category scores, computed from the findings, above the findings grouped by file. "Reused from an earlier review of this commit" marks a cached result. |
+| ![Expanded finding](docs/media/03-finding.png) | **One finding.** Why it matters, the suggested fix and the cited lines cut from the file, with their real line numbers. |
+| ![Filters](docs/media/04-filters.png) | **Filters and good practices.** Only warnings shown, the file list follows the filter, and "What is working" lists what the model found done well. |
+| ![History](docs/media/05-history.png) | **History.** Each user sees only their own reviews, with commit, status and score. |
+| ![Failed review](docs/media/06-review-failed.png) | **Failure.** A repository that does not exist fails at once with a clear reason and a way back. |
+| ![Swagger UI](docs/media/07-swagger.png) | **API documentation.** Swagger UI with the bearer token scheme; the endpoints with a lock need a token. |
+
 ## How a review works
 
 ```mermaid
