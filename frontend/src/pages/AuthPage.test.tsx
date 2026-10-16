@@ -1,8 +1,13 @@
 import { fireEvent, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { readToken } from '../auth/tokenStore'
+import { readToken, writeToken } from '../auth/tokenStore'
 import { fakeBackend, problem } from '../test/api'
 import { renderApp } from '../test/renderApp'
+
+const USER = { id: 7, email: 'ana@example.com' }
+const ME = { 'GET /api/auth/me': { status: 200, body: USER } }
+const LOGGED_IN = { accessToken: 'new-token', expiresIn: 86400, user: USER }
+const EMPTY_PAGE = { items: [], page: 0, size: 20, totalItems: 0 }
 
 function fill(email: string, password: string) {
   fireEvent.change(screen.getByLabelText('Email'), { target: { value: email } })
@@ -54,6 +59,53 @@ describe('AuthPage', () => {
 
     expect(await screen.findByText('Password must be at least 8 characters.')).toBeInTheDocument()
     expect(screen.queryByText('Validation failed')).not.toBeInTheDocument()
+  })
+
+  it('says the session has expired and returns to the same page after logging in', async () => {
+    writeToken('valid')
+    fakeBackend({
+      ...ME,
+      'GET /api/reviews?page=0&size=20': [problem(401, 'Authentication required'), { status: 200, body: EMPTY_PAGE }],
+      'POST /api/auth/login': { status: 200, body: LOGGED_IN },
+    })
+    renderApp('/reviews')
+
+    expect(await screen.findByText('Your session has expired. Log in again.')).toHaveAttribute('role', 'status')
+    expect(readToken()).toBeNull()
+
+    fill('ana@example.com', 'long-enough-password')
+    fireEvent.click(screen.getByRole('button', { name: 'Log in' }))
+
+    expect(await screen.findByRole('heading', { name: 'Your reviews' })).toBeInTheDocument()
+    expect(screen.queryByText(/Your session has expired/)).not.toBeInTheDocument()
+  })
+
+  it('says the session has expired when the stored token is refused on load', async () => {
+    writeToken('expired-since-last-visit')
+    fakeBackend({ 'GET /api/auth/me': problem(401, 'Authentication required') })
+    renderApp('/reviews')
+
+    expect(await screen.findByText('Your session has expired. Log in again.')).toHaveAttribute('role', 'status')
+  })
+
+  it('says nothing about a session to a new visitor', async () => {
+    fakeBackend({})
+    renderApp('/login')
+
+    expect(await screen.findByRole('heading', { name: 'Log in' })).toBeInTheDocument()
+    expect(screen.queryByText(/Your session has expired/)).not.toBeInTheDocument()
+  })
+
+  it('says nothing about a session after logging out', async () => {
+    writeToken('valid')
+    fakeBackend(ME)
+    renderApp('/')
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Log out' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Log in' }))
+
+    expect(await screen.findByRole('heading', { name: 'Log in' })).toBeInTheDocument()
+    expect(screen.queryByText(/Your session has expired/)).not.toBeInTheDocument()
   })
 
   it('signs in after registering and goes to the start page', async () => {

@@ -1,7 +1,14 @@
 import { createContext, useContext } from 'react'
 import type { AuthResponse, User } from '../api/types'
 
-export type AuthState = { status: 'loading' } | { status: 'signedIn'; user: User } | { status: 'signedOut' }
+/**
+ * Who is signed in. A sign-out caused by a refused token carries the reason `expired`, so
+ * the login page can say why it appeared; logging out and a first visit carry none.
+ */
+export type AuthState =
+  | { status: 'loading' }
+  | { status: 'signedIn'; user: User }
+  | { status: 'signedOut'; reason?: 'expired' }
 
 export interface AuthContextValue {
   state: AuthState

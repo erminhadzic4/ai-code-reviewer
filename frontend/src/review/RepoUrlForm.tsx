@@ -1,5 +1,5 @@
 import { useId, useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router'
+import { useLocation, useNavigate } from 'react-router'
 import { ApiError } from '../api/client'
 import { submitReview } from '../api/reviews'
 import { useAuth } from '../auth/AuthContext'
@@ -21,6 +21,7 @@ interface Props {
 export function RepoUrlForm({ initialUrl = '', autoFocus = false }: Props) {
   const { state } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [url, setUrl] = useState(initialUrl)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -33,8 +34,10 @@ export function RepoUrlForm({ initialUrl = '', autoFocus = false }: Props) {
       setError('Enter the URL of a GitHub repository.')
       return
     }
+    // After logging in, the user comes back to this page; the landing page puts the URL back
+    // in the field.
+    const redirect: LoginRedirectState = { from: location.pathname + location.search, repoUrl }
     if (state.status !== 'signedIn') {
-      const redirect: LoginRedirectState = { from: '/', repoUrl }
       navigate('/login', { state: redirect })
       return
     }
@@ -44,8 +47,15 @@ export function RepoUrlForm({ initialUrl = '', autoFocus = false }: Props) {
       const review = await submitReview(repoUrl)
       navigate(`/reviews/${review.id}`)
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'The review could not be submitted.')
       setBusy(false)
+      // The form is sent only with a token, so a 401 means the session has expired: log in
+      // again, as a visitor who was never signed in would. Replace, so that Back from the
+      // login page does not return to the form that was just refused.
+      if (e instanceof ApiError && e.status === 401) {
+        navigate('/login', { replace: true, state: redirect })
+        return
+      }
+      setError(e instanceof ApiError ? e.message : 'The review could not be submitted.')
     }
   }
 

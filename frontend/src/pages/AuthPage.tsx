@@ -96,6 +96,11 @@ export function AuthPage({ mode }: { mode: Mode }) {
         <Eyebrow>Your account</Eyebrow>
         <h1 className={styles.title}>{text.title}</h1>
         <p className={styles.lead}>{text.lead}</p>
+        {mode === 'login' && state.status === 'signedOut' && state.reason === 'expired' && (
+          <p className={styles.context} role="status">
+            Your session has expired. Log in again.
+          </p>
+        )}
         {redirect.repoUrl && <p className={styles.context}>Sign in to review {redirect.repoUrl}.</p>}
       </div>
       <Panel padding="lg" className={styles.card}>
