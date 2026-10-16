@@ -597,3 +597,85 @@ Full reasoning and rejected alternatives are in `ARCHITECTURE.md`. The main deci
   breaks the sticky file list of the report.
 - **The cards of the example take an outline when focused.** They carry their own shadows,
   which would hide the shadow-based focus ring used elsewhere.
+
+## 2026-10-16: M8 polish
+- **Every base image is pinned to an exact tag:** `eclipse-temurin:21.0.12.1_1-jdk-resolute`
+  and `eclipse-temurin:21.0.12.1_1-jre-resolute` for the backend, `node:24.21.0-alpine3.24`
+  and `nginx:1.30.6-alpine3.24` for the frontend, `postgres:18` as before. Rejected: floating
+  tags such as `21-jre` or `latest`, which change what a build produces without a commit.
+- **The backend images are the Ubuntu variants.** They are Temurin's default images (glibc),
+  and the runtime image already has `curl` for the health check. Rejected: the Alpine
+  variants, smaller but built on musl instead of glibc.
+  The frontend uses Alpine: Node only builds static files, and nginx on Alpine has `wget`.
+- **Both images are built in two stages.** The final image holds only the jar, or only the
+  built files, and runs without root rights. Tests do not run in the image build: they need
+  Docker for their database, and CI runs them. A CI job builds both images with the example
+  configuration, so a broken Dockerfile fails a pull request. Rejected: starting the whole
+  stack in CI, slower and already covered by the tests.
+- **nginx looks up the backend per request** (`resolver 127.0.0.11` and the address in a
+  variable). It starts without the backend and follows a recreated container. Rejected: a
+  fixed `proxy_pass http://backend:8080`, which is resolved once at startup. Hashed files under
+  `/assets/` are cached for a year and a missing one is a 404, never the page; every other
+  address that is not a file returns `index.html`.
+- **Each service gets an explicit list of variables** from `.env`; the frontend gets none.
+  Rejected: `env_file`, which hands every value, the Gemini key included, to every container.
+- **Start order follows health checks:** `db` (`pg_isready`), then `backend` (`curl` on
+  `/actuator/health`, healthy after Flyway has run at startup), then `frontend` (`wget` on
+  `127.0.0.1`, because `localhost` may resolve to the IPv6 address on which nginx does not
+  listen). Rejected: a separate Flyway container, a second copy of the same migrations.
+- **`JWT_SECRET` must be set by hand** after copying `.env.example`: Compose refuses an empty
+  value and the backend refuses the example value. Rejected: a default secret (public) and a
+  secret generated at start (every token invalid after a restart).
+- **A variable set in the shell or in the operating system's environment takes precedence
+  over `.env`,** for Compose and for Spring Boot alike. This was found while testing, when a
+  user-level variable silently replaced the value in `.env`; the README states it.
+- **API documentation with springdoc-openapi 3.0.3** (`springdoc-openapi-starter-webmvc-ui`).
+  The 3.0 line is the one for Spring Boot 4.0; 3.1 moved to Spring Boot 4.1. It brings
+  swagger-core, which uses Jackson 2 modules next to the application's Jackson 3. The
+  description and the viewer are public (GET only); the endpoints they describe still need a
+  token, shown as one bearer scheme for all operations, cleared for registration and login.
+  Generic error answers of the exception handler are not added to every operation; each lists
+  its own. The viewer is at `http://localhost:8080/swagger-ui.html`, published on `127.0.0.1`
+  only, and is to be turned off for a public version (ROADMAP, "Later").
+- **A gateway status without a problem detail is shown as a network error.** 502, 503 and
+  504 with an HTML or empty body come from the proxy while the backend is down or starting.
+  The status number is kept, so polling keeps retrying. A 5xx answered by the backend itself
+  keeps the generic message, as before.
+- **An expired session is explained.** A 401 on a request that carried a token signs the user
+  out with the reason "expired", and the login page says so; logging out and a first visit
+  show nothing. The review form answers a 401 by going to the login page with the URL. If
+  the session expires while the form on `/reviews/new` is open, the user returns to
+  `/reviews/new` after logging in but the field is empty; the landing page keeps the URL.
+  Rejected: a notification system for one message; reading the token's expiry in the browser.
+- **An unreachable server keeps the session.** When the check of a stored token gets no
+  answer (a network error or a 5xx), the token is kept and protected pages show "The server
+  cannot be reached" with a button to check again; the navigation is hidden while it is not
+  known who is signed in. Only a 401 signs the user out. Rejected: retrying in a loop.
+- **The failure screen now offers `/reviews/new`** ("Review another repository"), like the
+  navigation; the M7.5 entry above describes the earlier state.
+- **The favicon matches the navigation logo:** two neutral rings on the dark tile instead of
+  an accent ring. The version is 1.0.0 in `pom.xml`, `package.json` and the API description.
+- **First real review with Gemini.** A public C# repository of 45 reviewable files (5 346
+  lines, two chunks), model `gemini-3.5-flash-lite`, prompt version 1. Google answered 503
+  three times; the retry inside the job (after 5 and 20 seconds) handled it, so the review sent
+  5 requests for 2 chunks and took 1 min 17 s. No 429, no finding discarded, the lines
+  checked against the repository correct, score 94 (maintainability 82). But six of the
+  eight findings were HIGH and claimed that a wrong value changed the behaviour; following
+  the code showed that the value had no effect on the outcome, so the claimed effect did not
+  exist.
+- **Generated resource files are not filtered for now.** The 14 `.resx` files of that
+  repository, with `.gitignore` and `.gitattributes`, took an estimated 30 000 of the 78 000
+  input tokens (by their share of the characters) and drew no finding. Rejected for now:
+  adding them to the file filter on the evidence of one review; noted under "Later" in the
+  ROADMAP.
+- **The prompt asks for evidence (version 2).** Before reporting a consequence, the model is
+  told to confirm in the given code that the value or code is used in the way that causes
+  it; CRITICAL and HIGH must name the line where the failure happens and how it is
+  triggered, otherwise only what is visible is reported, as MEDIUM or LOW. A test pins the
+  SHA-256 of the instructions to the version, so a change without a new version fails.
+  The rerun on the same commit sent 2 requests and took 32 s: four LOW findings, all correct
+  (two kept from the first run, two new), the six unsupported HIGH findings gone, score 99.
+  Limits: one repository and one run each, a model whose answers vary between runs, fewer
+  findings overall, the unused value behind the six findings not reported at all although
+  the prompt asks for it, and no good practice in that run. The prompt is not tuned further
+  on this evidence.
